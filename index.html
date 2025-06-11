@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房地產資料篩選與分析儀表板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf-autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc; /* Tailwind gray-50 */
+        }
+        .title-gradient {
+            background: -webkit-linear-gradient(45deg, #3b82f6, #14b8a6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        .table-container::-webkit-scrollbar, .dropdown-checkbox-menu::-webkit-scrollbar { width: 8px; }
+        .table-container::-webkit-scrollbar-track, .dropdown-checkbox-menu::-webkit-scrollbar-track { background: #f1f5f9; }
+        .table-container::-webkit-scrollbar-thumb, .dropdown-checkbox-menu::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover, .dropdown-checkbox-menu::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .loader {
+            border: 5px solid #f3f3f3; border-top: 5px solid #3498db;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .modal {
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.4); transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            background-color: #fefefe; margin: 15% auto; padding: 24px;
+            border-radius: 12px; width: 90%; max-width: 450px;
+            text-align: center; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
+            transform: translateY(-50px); transition: transform 0.3s ease;
+        }
+        .modal-close {
+            color: #aaa; float: right; font-size: 28px; font-weight: bold; line-height: 1; cursor: pointer;
+        }
+        .modal-close:hover, .modal-close:focus { color: black; text-decoration: none; }
+
+        .dropdown-checkbox-container { position: relative; display: inline-block; width: 100%; }
+        .dropdown-checkbox-button {
+            width: 100%; text-align: left; background-color: white; padding: 0.5rem;
+            border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .dropdown-checkbox-menu {
+            display: none; position: absolute; background-color: white;
+            width: 100%; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 50; border-radius: 0.5rem; border: 1px solid #e5e7eb;
+            max-height: 250px; overflow-y: auto; margin-top: 4px;
+        }
+        .dropdown-checkbox-menu label { display: block; padding: 8px 12px; cursor: pointer; }
+        .dropdown-checkbox-menu label:hover { background-color: #f3f4f6; }
+
+        #searchModeToggle:checked ~ .dot { transform: translateX(1rem); }
+        #searchModeToggle:checked ~ .toggle-bg { background-color: #3b82f6; }
+        #searchModeToggle:disabled ~ * { cursor: not-allowed; opacity: 0.5; }
+
+        .tab-button {
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            display: none; /* Hidden by default */
+        }
+        .tab-button.visible { display: inline-flex; }
+        .tab-button.active { border-color: #3b82f6; color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .sort-button { @apply px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition-colors; }
+        .sort-button.active { @apply bg-blue-500 text-white border-blue-500; }
+
+        .analysis-table th, .analysis-table td { text-align: center; }
+        .analysis-table .text-left { text-align: left; }
+
+        .anomaly-count {
+            @apply ml-2 bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold title-gradient">房地產資料篩選與分析儀表板</h1>
+            <p class="mt-2 text-gray-600">上傳您的CSV檔案，篩選資料並產生分析報告。</p>
+        </header>
+
+        <!-- Loading Indicator -->
+        <div id="loader" class="hidden fixed top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+            <div class="text-center">
+                <div class="loader mx-auto"></div>
+                <p class="text-white mt-4" id="loaderText">讀取中...</p>
+            </div>
+        </div>
+        
+        <!-- Custom Alert Modal -->
+        <div id="customAlert" class="modal">
+          <div class="modal-content">
+            <span class="modal-close" id="modalClose">&times;</span>
+            <p id="alertMessage" class="my-4 text-lg text-gray-700"></p>
+          </div>
+        </div>
+
+        <!-- Filters and Controls Section -->
+        <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Column: Filters -->
+                <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="csvFile" class="block text-sm font-medium text-gray-700 mb-2">1. 選擇CSV檔案</label>
+                        <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                            file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                    </div>
+                     <div>
+                        <label for="buildingNameSearch" class="block text-sm font-medium text-gray-700 mb-2">4. 建案名稱搜尋</label>
+                        <input type="text" id="buildingNameSearch" placeholder="輸入建案關鍵字..." class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
+                        <div class="flex items-center justify-end mt-2 h-6">
+                            <label for="searchModeToggle" class="flex items-center cursor-pointer">
+                                <span class="mr-3 text-sm font-medium text-gray-700" id="searchModeLabel">模糊</span>
+                                <div class="relative">
+                                    <input type="checkbox" id="searchModeToggle" class="sr-only" disabled>
+                                    <div class="toggle-bg block bg-gray-200 w-10 h-6 rounded-full"></div>
+                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out"></div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="districtFilter" class="block text-sm font-medium text-gray-700 mb-2">2. 行政區</label>
+                        <select id="districtFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" disabled>
+                            <option value="all">所有行政區</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">3. 建築類型</label>
+                        <div id="buildingTypeContainer" class="dropdown-checkbox-container">
+                            <button type="button" id="buildingTypeButton" class="dropdown-checkbox-button" disabled>
+                                <span id="buildingTypeButtonText">所有類型</span>
+                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="buildingTypeMenu" class="dropdown-checkbox-menu"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Date & Action -->
+                <div class="lg:col-span-1 flex flex-col justify-between">
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">5. 交易時間</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="date" id="startDate" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition" disabled>
+                            <span class="text-gray-500">至</span>
+                            <input type="date" id="endDate" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition" disabled>
+                        </div>
+                    </div>
+                    <div class="pt-6"> 
+                        <button id="generateReportBtn" class="bg-blue-600 w-full text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                            產生分析報告
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Anomaly Filters -->
+            <div id="anomalyFilterSection" class="mt-6 pt-6 border-t border-gray-200 hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">異常資料篩選</h3>
+                <p class="text-sm text-gray-600 mb-4">勾選您想從「分析報告」中排除的異常資料類型。</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+                        <input type="checkbox" id="anomaly1" name="anomaly" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5">
+                        <span class="ml-3 text-sm">
+                            <strong class="font-semibold text-gray-900" id="anomaly1Label">有車位價無車位數</strong>
+                            <p class="text-gray-500">有車位總價但車位數為0或空白。</p>
+                        </span>
+                    </label>
+                    <label class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+                        <input type="checkbox" id="anomaly2" name="anomaly" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5">
+                        <span class="ml-3 text-sm">
+                            <strong class="font-semibold text-gray-900" id="anomaly2Label">僅售車位</strong>
+                            <p class="text-gray-500">有車位總價但無房屋總價的交易。</p>
+                        </span>
+                    </label>
+                    <label class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+                        <input type="checkbox" id="anomaly3" name="anomaly" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5">
+                        <span class="ml-3 text-sm">
+                            <strong class="font-semibold text-gray-900" id="anomaly3Label">疑似店面</strong>
+                            <p class="text-gray-500">1樓成交且單價顯著高於建案平均。</p>
+                        </span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Results Section -->
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">篩選結果</h2>
+        <div id="resultsSummary" class="mb-4 text-center h-6 font-medium"></div>
+        <div class="bg-white rounded-2xl shadow-lg p-4">
+             <div class="table-container rounded-lg border">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0 z-10">
+                        <tr id="tableHeader"></tr>
+                    </thead>
+                    <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                        <tr><td colspan="10" class="text-center p-8 text-gray-500">請先載入並篩選資料。</td></tr>
+                    </tbody>
+                </table>
+             </div>
+             <!-- Pagination Controls -->
+             <div id="paginationControls" class="flex items-center justify-between mt-4"></div>
+        </div>
+        
+        <!-- Anomaly Results Section -->
+        <div id="anomalyResultsSection" class="mt-12 hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">異常資料列表</h2>
+            <div id="anomalySummary" class="mb-4 text-center h-6 font-medium"></div>
+            <div class="bg-white rounded-2xl shadow-lg p-4">
+                 <div class="table-container rounded-lg border">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0 z-10">
+                            <tr id="anomalyTableHeader"></tr>
+                        </thead>
+                        <tbody id="anomalyTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Content generated by JS -->
+                        </tbody>
+                    </table>
+                 </div>
+                 <!-- Anomaly Pagination Controls -->
+                 <div id="anomalyPaginationControls" class="flex items-center justify-between mt-4"></div>
+            </div>
+        </div>
+
+        <!-- Analysis Report Section -->
+        <div id="analysisSection" class="mt-12 hidden">
+             <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">分析報告</h2>
+                <button id="exportPdfBtn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors duration-300">
+                    匯出 PDF
+                </button>
+             </div>
+             <div id="report-content-wrapper" class="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
+                <!-- Tab Buttons -->
+                <div class="border-b border-gray-200">
+                    <nav class="-mb-px flex flex-wrap space-x-6" id="tabContainer">
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="core-metrics">核心指標</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="case-ranking">個案排名</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="house-price-band">總價帶分析</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="unit-price">房屋單價</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="parking-price">車位單價</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="annual-sales">年度去化</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="quarterly-sales">每季去化</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="monthly-sales">每月去化</button>
+                    </nav>
+                </div>
+                <!-- Tab Content -->
+                <div class="pt-6">
+                    <div id="core-metrics-content" class="tab-content"></div>
+                    <div id="case-ranking-content" class="tab-content"></div>
+                    <div id="house-price-band-content" class="tab-content"></div>
+                    <div id="unit-price-content" class="tab-content"></div>
+                    <div id="parking-price-content" class="tab-content"></div>
+                    <div id="annual-sales-content" class="tab-content"></div>
+                    <div id="quarterly-sales-content" class="tab-content"></div>
+                    <div id="monthly-sales-content" class="tab-content"></div>
+                </div>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const csvFileInput = document.getElementById('csvFile');
+        const districtFilter = document.getElementById('districtFilter');
+        const buildingNameSearch = document.getElementById('buildingNameSearch');
+        const searchModeToggle = document.getElementById('searchModeToggle');
+        const searchModeLabel = document.getElementById('searchModeLabel');
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const generateReportBtn = document.getElementById('generateReportBtn');
+        const exportPdfBtn = document.getElementById('exportPdfBtn');
+        const tableHeader = document.getElementById('tableHeader');
+        const tableBody = document.getElementById('tableBody');
+        const resultsSummary = document.getElementById('resultsSummary');
+        const paginationControls = document.getElementById('paginationControls');
+        const analysisSection = document.getElementById('analysisSection');
+        const tabContainer = document.getElementById('tabContainer');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loaderText');
+        const customAlert = document.getElementById('customAlert');
+        const alertMessage = document.getElementById('alertMessage');
+        const modalClose = document.getElementById('modalClose');
+        const buildingTypeContainer = document.getElementById('buildingTypeContainer');
+        const buildingTypeButton = document.getElementById('buildingTypeButton');
+        const buildingTypeButtonText = document.getElementById('buildingTypeButtonText');
+        const buildingTypeMenu = document.getElementById('buildingTypeMenu');
+        const anomalyFilterSection = document.getElementById('anomalyFilterSection');
+        const anomalyResultsSection = document.getElementById('anomalyResultsSection');
+        const anomalyTableHeader = document.getElementById('anomalyTableHeader');
+        const anomalyTableBody = document.getElementById('anomalyTableBody');
+        const anomalySummary = document.getElementById('anomalySummary');
+        const anomalyPaginationControls = document.getElementById('anomalyPaginationControls');
+        const anomaly1Label = document.getElementById('anomaly1Label');
+        const anomaly2Label = document.getElementById('anomaly2Label');
+        const anomaly3Label = document.getElementById('anomaly3Label');
+
+        // Global state
+        let fullData = [];
+        let filteredData = [];
+        let anomalousData = [];
+        let headers = [];
+        let columnNames = { district: null, buildingType: null, date: null, buildingName: null, totalPrice: null, area: null, housePrice: null, room: null, bathroom: null, parkingPrice: null, parkingCount: null, parkingType: null, floor: null };
+        let currentPage = 1;
+        let currentAnomalyPage = 1;
+        let caseRankingSortKey = 'avgUnitPrice'; // Default sort key
+        const ROWS_PER_PAGE = 30;
+
+        // --- Custom Alert ---
+        function showAlert(message) {
+            alertMessage.textContent = message;
+            customAlert.style.display = 'block';
+            setTimeout(() => { customAlert.style.opacity = 1; customAlert.querySelector('.modal-content').style.transform = 'translateY(0)'; }, 10);
+        }
+        function hideAlert() {
+            customAlert.style.opacity = 0;
+            customAlert.querySelector('.modal-content').style.transform = 'translateY(-50px)';
+            setTimeout(() => customAlert.style.display = 'none', 300);
+        }
+        modalClose.onclick = hideAlert;
+        
+        function showLoader(show, text = "讀取中...") {
+            loaderText.textContent = text;
+            loader.classList.toggle('hidden', !show);
+        }
+
+        // --- Utility & Formatting Functions ---
+        const safeParseFloat = (val) => {
+            if (val === null || val === undefined || val === '') return 0;
+            const num = parseFloat(String(val).replace(/,/g, ''));
+            return isNaN(num) ? 0 : num;
+        };
+        const safeParseInt = (val) => {
+            if (val === null || val === undefined || val === '') return 0;
+            const num = parseInt(String(val).replace(/,/g, ''), 10);
+            return isNaN(num) ? 0 : num;
+        };
+        const formatNumber = (value, isArea = false) => {
+            if (typeof value !== 'number' || isNaN(value)) return '-';
+            const digits = isArea ? 2 : 0;
+            return value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+        };
+
+        function parseDateString(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const trimmedStr = dateStr.trim();
+            const d = new Date(trimmedStr);
+            if (!isNaN(d.getTime())) return d;
+            try {
+                if (trimmedStr.length >= 7) {
+                    const year = parseInt(trimmedStr.substring(0, 3), 10) + 1911;
+                    const month = parseInt(trimmedStr.substring(3, 5), 10) - 1;
+                    const day = parseInt(trimmedStr.substring(5, 7), 10);
+                    if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+                    const minguoDate = new Date(year, month, day);
+                    if (minguoDate.getFullYear() === year && minguoDate.getMonth() === month && minguoDate.getDate() === day) return minguoDate;
+                } else if (trimmedStr.length >= 5) {
+                    const year = parseInt(trimmedStr.substring(0, 3), 10) + 1911;
+                    const month = parseInt(trimmedStr.substring(3, 5), 10) - 1;
+                    if (isNaN(year) || isNaN(month)) return null;
+                    const minguoDate = new Date(year, month, 1);
+                    if (minguoDate.getFullYear() === year && minguoDate.getMonth() === month) return minguoDate;
+                }
+            } catch (e) { console.error(`轉換民國日期時發生錯誤: ${dateStr}`, e); return null; }
+            return null;
+        }
+        
+        function toISODateString(date) { return date.toISOString().split('T')[0]; }
+
+        function findColumnName(headerList, keywords) {
+            for (const keyword of keywords) {
+                const foundHeader = headerList.find(h => h.trim().toLowerCase().includes(keyword.toLowerCase()));
+                if (foundHeader) return foundHeader.trim();
+            }
+            return null;
+        }
+
+        function calculateQuartiles(arr) {
+            if (arr.length === 0) return { q1: 0, median: 0, q3: 0, min: 0, max: 0, avg: 0 };
+            
+            const sortedArr = [...arr].sort((a, b) => a - b);
+            const mid = Math.floor(sortedArr.length / 2);
+
+            const getMedian = (subArr) => {
+                if (subArr.length === 0) return 0;
+                const subMid = Math.floor(subArr.length / 2);
+                return subArr.length % 2 === 0 ? (subArr[subMid - 1] + subArr[subMid]) / 2 : subArr[subMid];
+            };
+
+            const q1 = getMedian(sortedArr.slice(0, mid));
+            const median = getMedian(sortedArr);
+            const q3 = getMedian(sortedArr.slice(sortedArr.length % 2 === 0 ? mid : mid + 1));
+            const min = sortedArr[0];
+            const max = sortedArr[sortedArr.length - 1];
+            const avg = sortedArr.reduce((a, b) => a + b, 0) / sortedArr.length;
+
+            return { q1, median, q3, min, max, avg };
+        }
+
+        // --- Data Loading and Processing ---
+        const customPapaParse = (file, config) => {
+            let index = 0;
+            const originalComplete = config.complete;
+            config.complete = (results) => {
+                results.data.forEach(row => {
+                    row['$$index_from_parser'] = index++;
+                });
+                if (originalComplete) {
+                    originalComplete(results);
+                }
+            };
+            Papa.parse(file, config);
+        };
+        
+        const fileInputHandler = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            showLoader(true);
+            const config = {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    if (results.errors.length > 0) {
+                        console.error("CSV 解析錯誤:", results.errors);
+                        showAlert(`檔案解析時發生錯誤，請檢查檔案第 ${results.errors[0].row} 行附近的格式。`);
+                    }
+                    fullData = results.data;
+                    headers = results.meta.fields;
+                    
+                    const columnMapping = {
+                        district: ['行政區', '鄉鎮市區'],
+                        buildingType: ['建物型態'],
+                        date: ['交易年月', '交易年月日'],
+                        buildingName: ['建案名稱'],
+                        totalPrice: ['產權總價(萬)', '產權總價', '總價'],
+                        area: ['房屋坪數(坪)', '房屋坪數', '坪數'],
+                        housePrice: ['房屋總價(萬)', '房屋總價'],
+                        room: ['房', '房間數'],
+                        bathroom: ['衛', '衛浴數'],
+                        parkingPrice: ['車位總價(萬)', '車位總價'],
+                        parkingCount: ['車位數'],
+                        parkingType: ['車位類型'],
+                        floor: ['樓層']
+                    };
+
+                    let missingCols = [];
+                    for (const key in columnMapping) {
+                        columnNames[key] = findColumnName(headers, columnMapping[key]);
+                        if (!columnNames[key] && !['buildingName', 'housePrice', 'parkingPrice', 'parkingCount', 'parkingType', 'floor'].includes(key)) {
+                            missingCols.push(`'${columnMapping[key][0]}'`);
+                        }
+                    }
+
+                    if(missingCols.length > 0) {
+                        showAlert(`警告：在您的CSV檔案中找不到以下必要的欄位：${missingCols.join(', ')}。部分分析功能可能無法使用。`);
+                    }
+
+                    enableFilters(true);
+                    populateFilters(fullData);
+                    applyFilters();
+                    anomalyFilterSection.classList.remove('hidden');
+                    showLoader(false);
+                },
+                error: (err) => { showAlert("檔案解析失敗，請確認檔案格式是否為標準CSV。"); showLoader(false); }
+            };
+            customPapaParse(file, config);
+        };
+        
+        function enableFilters(enabled) {
+            [districtFilter, buildingTypeButton, buildingNameSearch, searchModeToggle, startDateInput, endDateInput, generateReportBtn].forEach(el => el.disabled = !enabled);
+        }
+
+        function populateFilters(data) {
+            if (data.length === 0) return;
+            const districts = new Set();
+            const buildingTypes = new Set();
+            let minDate = null, maxDate = null;
+            data.forEach(row => {
+                if (columnNames.district && row[columnNames.district]) districts.add(row[columnNames.district]);
+                if (columnNames.buildingType && row[columnNames.buildingType]) buildingTypes.add(row[columnNames.buildingType].split('(')[0]);
+                if (columnNames.date) {
+                    const currentDate = parseDateString(row[columnNames.date]);
+                    if (currentDate) {
+                        if (!minDate || currentDate < minDate) minDate = currentDate;
+                        if (!maxDate || currentDate > maxDate) maxDate = currentDate;
+                    }
+                }
+            });
+            districtFilter.innerHTML = '<option value="all">所有行政區</option>';
+            [...districts].sort((a,b) => a.localeCompare(b, 'zh-Hant')).forEach(d => {
+                const option = document.createElement('option');
+                option.value = d; option.textContent = d;
+                districtFilter.appendChild(option);
+            });
+            buildingTypeMenu.innerHTML = '';
+            const sortedTypes = [...buildingTypes].sort();
+            const allLabel = document.createElement('label');
+            allLabel.className = "font-semibold border-b";
+            allLabel.innerHTML = `<input type="checkbox" class="mr-2" id="select-all-types">全部選取`;
+            buildingTypeMenu.appendChild(allLabel);
+            sortedTypes.forEach(t => {
+                const label = document.createElement('label');
+                label.innerHTML = `<input type="checkbox" class="mr-2 building-type-checkbox" value="${t}">${t}`;
+                buildingTypeMenu.appendChild(label);
+            });
+            document.getElementById('select-all-types').addEventListener('change', (e) => {
+                document.querySelectorAll('.building-type-checkbox').forEach(cb => cb.checked = e.target.checked);
+                updateBuildingTypeButtonText();
+                applyFilters();
+            });
+            if (minDate && maxDate) {
+                startDateInput.value = toISODateString(minDate);
+                endDateInput.value = toISODateString(maxDate);
+            }
+        }
+        
+        // --- Rendering & Pagination ---
+        function renderTable(dataToRender, page = 1) {
+            tableHeader.innerHTML = headers.map(h => `<th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">${h}</th>`).join('');
+            
+            const startIndex = (page - 1) * ROWS_PER_PAGE;
+            const endIndex = startIndex + ROWS_PER_PAGE;
+            const paginatedData = dataToRender.slice(startIndex, endIndex);
+
+            let content = '';
+            if (fullData.length > 0 && dataToRender.length === 0) {
+                 content = `<tr><td colspan="${headers.length || 10}" class="text-center p-8 text-gray-500">沒有符合條件的資料。</td></tr>`;
+            } else if (fullData.length === 0){
+                 content = `<tr><td colspan="10" class="text-center p-8 text-gray-500">請先載入並篩選資料。</td></tr>`;
+            } else {
+                content = paginatedData.map(row => `
+                    <tr class="hover:bg-gray-50 transition-colors duration-150">
+                        ${headers.map(h => `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${row[h] || ''}</td>`).join('')}
+                    </tr>`).join('');
+            }
+            tableBody.innerHTML = content;
+            resultsSummary.textContent = fullData.length > 0 ? `共找到 ${dataToRender.length} 筆資料` : '';
+            renderPaginationControls(dataToRender.length, page, 'main');
+        }
+
+        function renderPaginationControls(totalRows, page, type) {
+            const controlsContainer = type === 'main' ? paginationControls : anomalyPaginationControls;
+            controlsContainer.innerHTML = '';
+            const totalPages = Math.ceil(totalRows / ROWS_PER_PAGE);
+            if (totalPages <= 1) return;
+
+            const prevDisabled = page === 1 ? 'disabled' : '';
+            const nextDisabled = page === totalPages ? 'disabled' : '';
+
+            controlsContainer.innerHTML = `
+                <button data-type="${type}" class="page-btn bg-white border border-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-100 disabled:opacity-50" data-dir="prev" ${prevDisabled}>
+                    上一頁
+                </button>
+                <span class="text-gray-700">第 ${page} / ${totalPages} 頁</span>
+                <button data-type="${type}" class="page-btn bg-white border border-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-100 disabled:opacity-50" data-dir="next" ${nextDisabled}>
+                    下一頁
+                </button>
+            `;
+        }
+        
+        // --- Filtering Logic ---
+        function applyFilters() {
+            if (fullData.length === 0) return;
+            showLoader(true);
+            
+            setTimeout(() => {
+                const district = districtFilter.value;
+                const searchTerm = buildingNameSearch.value.trim();
+                const isExactMatch = searchModeToggle.checked;
+                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+                if (endDate) endDate.setHours(23, 59, 59, 999);
+                const selectedTypes = Array.from(document.querySelectorAll('.building-type-checkbox:checked')).map(cb => cb.value);
+
+                filteredData = fullData.filter(row => {
+                    const districtMatch = district === 'all' || !columnNames.district || row[columnNames.district] === district;
+                    const buildingTypeMatch = selectedTypes.length === 0 || !columnNames.buildingType || (row[columnNames.buildingType] && selectedTypes.includes(row[columnNames.buildingType].split('(')[0]));
+                    const buildingNameMatch = !searchTerm || !columnNames.buildingName || !row[columnNames.buildingName] || (isExactMatch ? row[columnNames.buildingName].trim() === searchTerm : row[columnNames.buildingName].includes(searchTerm));
+                    let dateMatch = true;
+                    if (columnNames.date && (startDate || endDate)) {
+                        const dateValue = row[columnNames.date];
+                        const transactionDate = parseDateString(dateValue);
+                        if (transactionDate) {
+                            const startMatch = !startDate || transactionDate >= startDate;
+                            const endMatch = !endDate || transactionDate <= endDate;
+                            dateMatch = startMatch && endMatch;
+                        } else { dateMatch = false; }
+                    }
+                    return districtMatch && buildingTypeMatch && dateMatch && buildingNameMatch;
+                });
+                
+                currentPage = 1;
+                renderTable(filteredData, currentPage);
+                identifyAndRenderAnomalies(filteredData);
+                analysisSection.style.display = 'none';
+                showLoader(false);
+            }, 10);
+        }
+
+        // --- Anomaly Detection and Rendering ---
+        function getAnomalyReasons(row, projectAvgUnitPrices) {
+            let reasons = [];
+            // Rule 1: Has parking price but no parking count
+            if (columnNames.parkingPrice && columnNames.parkingCount && safeParseFloat(row[columnNames.parkingPrice]) > 0 && safeParseInt(row[columnNames.parkingCount]) === 0) {
+                reasons.push('有車位價無車位數');
+            }
+            // Rule 2: Parking-only sale
+            const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
+            if (columnNames.parkingPrice && safeParseFloat(row[columnNames.parkingPrice]) > 0 && housePrice <= 0) {
+                reasons.push('僅售車位');
+            }
+            // Rule 3: Potential storefront
+            if (columnNames.floor && columnNames.buildingName && columnNames.area && projectAvgUnitPrices) {
+                const floor = String(row[columnNames.floor] || '').trim();
+                const name = row[columnNames.buildingName];
+                if ((floor.includes('一') || floor === '1') && name && projectAvgUnitPrices[name] > 0) {
+                    const area = safeParseFloat(row[columnNames.area]);
+                    if (area > 0) {
+                        if ((housePrice / area) > projectAvgUnitPrices[name] * 1.5) {
+                            reasons.push('疑似店面');
+                        }
+                    }
+                }
+            }
+            return reasons;
+        }
+
+        function identifyAndRenderAnomalies(data) {
+            anomalousData = [];
+            if (data.length === 0) {
+                anomalyResultsSection.classList.add('hidden');
+                return;
+            }
+
+            let projectAvgUnitPrices = {};
+            if (columnNames.buildingName && columnNames.area) {
+                const projects = data.reduce((acc, row) => {
+                    const name = row[columnNames.buildingName];
+                    if (!name) return acc;
+                    if (!acc[name]) acc[name] = { unitPrices: [] };
+                    const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
+                    const area = safeParseFloat(row[columnNames.area]);
+                    if (area > 0) acc[name].unitPrices.push(housePrice / area);
+                    return acc;
+                }, {});
+                for (const name in projects) {
+                    projectAvgUnitPrices[name] = calculateQuartiles(projects[name].unitPrices).avg;
+                }
+            }
+
+            let counts = { '有車位價無車位數': 0, '僅售車位': 0, '疑似店面': 0 };
+            data.forEach(row => {
+                const reasons = getAnomalyReasons(row, projectAvgUnitPrices);
+                if (reasons.length > 0) {
+                    reasons.forEach(r => counts[r]++);
+                    anomalousData.push({ ...row, anomalyReason: reasons.join(', ') });
+                }
+            });
+
+            // Update UI with counts
+            document.querySelectorAll('[id^=anomaly][id$=Label]').forEach(label => {
+                const existingCount = label.querySelector('.anomaly-count');
+                if (existingCount) existingCount.remove();
+            });
+            if(counts['有車位價無車位數'] > 0) anomaly1Label.innerHTML += `<span class="anomaly-count">${counts['有車位價無車位數']}</span>`;
+            if(counts['僅售車位'] > 0) anomaly2Label.innerHTML += `<span class="anomaly-count">${counts['僅售車位']}</span>`;
+            if(counts['疑似店面'] > 0) anomaly3Label.innerHTML += `<span class="anomaly-count">${counts['疑似店面']}</span>`;
+
+            if (anomalousData.length > 0) {
+                anomalyResultsSection.classList.remove('hidden');
+                currentAnomalyPage = 1;
+                renderAnomalyTable(anomalousData, currentAnomalyPage);
+            } else {
+                anomalyResultsSection.classList.add('hidden');
+            }
+        }
+
+        function renderAnomalyTable(data, page) {
+            const anomalyHeaders = [...headers, '異常原因'];
+            anomalyTableHeader.innerHTML = anomalyHeaders.map(h => `<th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">${h}</th>`).join('');
+            
+            const startIndex = (page - 1) * ROWS_PER_PAGE;
+            const paginatedData = data.slice(startIndex, startIndex + ROWS_PER_PAGE);
+
+            anomalyTableBody.innerHTML = paginatedData.map(row => `
+                <tr class="hover:bg-gray-50 transition-colors duration-150">
+                    ${headers.map(h => `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${row[h] || ''}</td>`).join('')}
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-red-600 font-semibold">${row.anomalyReason || ''}</td>
+                </tr>`).join('');
+            
+            anomalySummary.textContent = `共偵測到 ${data.length} 筆異常資料`;
+            renderPaginationControls(data.length, page, 'anomaly');
+        }
+        
+        // --- Analysis Logic ---
+        function filterByAnomalies(data, exclusions) {
+            if (!exclusions.exclude1 && !exclusions.exclude2 && !exclusions.exclude3) {
+                return data;
+            }
+            
+            let projectAvgUnitPrices = {}; // Re-calculate for the specific dataset if needed
+            if (exclusions.exclude3 && columnNames.buildingName && columnNames.area) {
+                 const projects = data.reduce((acc, row) => {
+                    const name = row[columnNames.buildingName];
+                    if (!name) return acc;
+                    if (!acc[name]) acc[name] = { unitPrices: [] };
+                    const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
+                    const area = safeParseFloat(row[columnNames.area]);
+                    if (area > 0) acc[name].unitPrices.push(housePrice / area);
+                    return acc;
+                }, {});
+                for (const name in projects) {
+                    projectAvgUnitPrices[name] = calculateQuartiles(projects[name].unitPrices).avg;
+                }
+            }
+            
+            return data.filter(row => {
+                const reasons = getAnomalyReasons(row, projectAvgUnitPrices);
+                if (reasons.length === 0) return true;
+                if (exclusions.exclude1 && reasons.includes('有車位價無車位數')) return false;
+                if (exclusions.exclude2 && reasons.includes('僅售車位')) return false;
+                if (exclusions.exclude3 && reasons.includes('疑似店面')) return false;
+                return true;
+            });
+        }
+
+        function generateAnalysisReport() {
+            if (filteredData.length === 0) {
+                showAlert('沒有可供分析的資料，請先篩選資料。');
+                return;
+            }
+            showLoader(true, "正在產生分析報告...");
+            
+            setTimeout(() => {
+                const exclusions = {
+                    exclude1: document.getElementById('anomaly1').checked,
+                    exclude2: document.getElementById('anomaly2').checked,
+                    exclude3: document.getElementById('anomaly3').checked
+                };
+
+                const generalAnalysisData = filterByAnomalies(filteredData, exclusions);
+                
+                const parkingAnalysisExclusions = { ...exclusions, exclude2: false };
+                const parkingAnalysisData = filterByAnomalies(filteredData, parkingAnalysisExclusions);
+                
+                if (generalAnalysisData.length === 0) {
+                    showAlert('篩選異常資料後，沒有剩餘資料可供分析。');
+                    showLoader(false);
+                    return;
+                }
+                
+                analysisSection.style.display = 'block';
+                renderCoreMetrics(generalAnalysisData);
+                renderCaseRanking(generalAnalysisData, caseRankingSortKey);
+                renderHousePriceBandAnalysis(generalAnalysisData);
+                renderUnitPriceAnalysis(generalAnalysisData);
+                renderParkingPriceAnalysis(parkingAnalysisData); // Use special dataset here
+                renderAnnualSales(generalAnalysisData);
+                renderQuarterlySales(generalAnalysisData);
+                renderMonthlySales(generalAnalysisData);
+                
+                updateVisibleTabs();
+
+                showLoader(false);
+                analysisSection.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+        }
+
+        function updateVisibleTabs() {
+            const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+            const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+            
+            let diffDays = 366; // Default to show all if no dates
+            if (startDate && endDate) {
+                const diffTime = Math.abs(endDate - startDate);
+                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            const tabs = {
+                'core-metrics': true,
+                'case-ranking': true,
+                'house-price-band': true,
+                'unit-price': true,
+                'parking-price': true,
+                'annual-sales': diffDays > 365,
+                'quarterly-sales': diffDays > 90,
+                'monthly-sales': diffDays <= 1095,
+            };
+
+            let firstVisibleTab = null;
+
+            for (const tabId in tabs) {
+                const button = document.querySelector(`[data-tab='${tabId}']`);
+                if (tabs[tabId]) {
+                    button.classList.add('visible');
+                    if (!firstVisibleTab) firstVisibleTab = tabId; // Set first visible tab
+                } else {
+                    button.classList.remove('visible', 'active');
+                    if(document.getElementById(`${tabId}-content`)) document.getElementById(`${tabId}-content`).classList.remove('active');
+                }
+            }
+            
+             let preferredTab = 'core-metrics';
+             if (tabs['monthly-sales']) preferredTab = 'monthly-sales';
+             else if (tabs['quarterly-sales']) preferredTab = 'quarterly-sales';
+             else if (tabs['annual-sales']) preferredTab = 'annual-sales';
+             else if(tabs['parking-price']) preferredTab = 'parking-price';
+             else if (tabs['unit-price']) preferredTab = 'unit-price';
+             else if (tabs['house-price-band']) preferredTab = 'house-price-band';
+             else if (tabs['case-ranking']) preferredTab = 'case-ranking';
+            
+            switchTab(preferredTab);
+        }
+
+        function renderCoreMetrics(data) {
+            const container = document.getElementById('core-metrics-content');
+            const missing = [];
+            if (!columnNames.totalPrice) missing.push("'產權總價(萬)'");
+            if (!columnNames.area) missing.push("'房屋坪數(坪)'");
+            if (!columnNames.housePrice && !columnNames.totalPrice) missing.push("'房屋總價(萬)' 或 '產權總價(萬)'");
+
+            if (missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少必要的欄位 (${missing.join(', ')})，無法計算核心指標。</p>`;
+                return;
+            }
+
+            const totalSales = data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.totalPrice]), 0);
+            const totalArea = data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.area]), 0);
+            const totalHousePrice = data.reduce((sum, row) => {
+                const housePriceVal = columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice]));
+                return sum + safeParseFloat(housePriceVal);
+            }, 0);
+            const avgPrice = totalArea > 0 ? totalHousePrice / totalArea : 0;
+            const transactionCount = data.length;
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-blue-800">市場去化總銷售金額</h3>
+                        <p class="text-3xl font-bold text-blue-600">${formatNumber(totalSales)} <span class="text-base font-medium">萬</span></p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-green-800">總銷去化房屋坪數</h3>
+                        <p class="text-3xl font-bold text-green-600">${formatNumber(totalArea, true)} <span class="text-base font-medium">坪</span></p>
+                    </div>
+                    <div class="bg-indigo-50 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-indigo-800">總行政區平均單價</h3>
+                        <p class="text-3xl font-bold text-indigo-600">${formatNumber(avgPrice, true)} <span class="text-base font-medium">萬/坪</span></p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-yellow-800">行政區去化筆數</h3>
+                        <p class="text-3xl font-bold text-yellow-600">${formatNumber(transactionCount)} <span class="text-base font-medium">筆</span></p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderCell(content) {
+            return `<td class="border px-2 py-2">${content}</td>`;
+        }
+        
+        function renderHousePriceBandAnalysis(data) {
+            const container = document.getElementById('house-price-band-content');
+            const missing = [];
+            const priceCol = columnNames.housePrice || columnNames.totalPrice;
+            if (!columnNames.room) missing.push("'房'");
+            if (!columnNames.bathroom) missing.push("'衛'");
+            if (!priceCol) missing.push("'房屋總價(萬)' 或 '產權總價(萬)'");
+
+            if(missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少必要的欄位 (${missing.join(', ')})，無法計算總價帶分析。</p>`;
+                return;
+            }
+
+            const groupedData = data.reduce((acc, row) => {
+                const rooms = safeParseInt(row[columnNames.room]);
+                const baths = safeParseInt(row[columnNames.bathroom]);
+                const key = `${rooms}房-${baths}衛`;
+                
+                if (!acc[key]) {
+                    acc[key] = { prices: [], rooms, baths };
+                }
+                const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[priceCol]) - safeParseFloat(row[columnNames.parkingPrice])));
+                if (isFinite(housePrice) && housePrice > 0) {
+                    acc[key].prices.push(housePrice);
+                }
+                return acc;
+            }, {});
+
+            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                    <tr>
+                        <th class="px-2 py-3 border">房間數</th>
+                        <th class="px-2 py-3 border">衛浴數</th>
+                        <th class="px-2 py-3 border">筆數</th>
+                        <th class="px-2 py-3 border">平均房屋總價</th>
+                        <th class="px-2 py-3 border">最低房屋總價</th>
+                        <th class="px-2 py-3 border">1/4分房屋總價</th>
+                        <th class="px-2 py-3 border">中位數房屋總價</th>
+                        <th class="px-2 py-3 border">3/4分房屋總價</th>
+                         <th class="px-2 py-3 border">最高房屋總價</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            
+            const sortedKeys = Object.keys(groupedData).sort((a, b) => {
+                const [aRooms, aBaths] = a.split('-').map(s => parseInt(s.replace(/[^0-9]/g, ''), 10));
+                const [bRooms, bBaths] = b.split('-').map(s => parseInt(s.replace(/[^0-9]/g, ''), 10));
+                if (aRooms !== bRooms) return aRooms - bRooms;
+                return aBaths - bBaths;
+            });
+
+            sortedKeys.forEach(key => {
+                const group = groupedData[key];
+                if (group.prices.length === 0) return;
+                const stats = calculateQuartiles(group.prices);
+                tableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
+                    ${renderCell(group.rooms)}
+                    ${renderCell(group.baths)}
+                    ${renderCell(formatNumber(group.prices.length))}
+                    ${renderCell(formatNumber(stats.avg))}
+                    ${renderCell(formatNumber(stats.min))}
+                    ${renderCell(formatNumber(stats.q1))}
+                    ${renderCell(formatNumber(stats.median))}
+                    ${renderCell(formatNumber(stats.q3))}
+                    ${renderCell(formatNumber(stats.max))}
+                </tr>`;
+            });
+
+            tableHTML += `</tbody></table></div>`;
+            container.innerHTML = tableHTML;
+        }
+        
+        function renderUnitPriceAnalysis(data) {
+            const container = document.getElementById('unit-price-content');
+            const missing = [];
+            const priceCol = columnNames.housePrice || columnNames.totalPrice;
+             if (!priceCol) missing.push("'房屋總價(萬)' 或 '產權總價(萬)'");
+            if (!columnNames.area) missing.push("'房屋坪數(坪)'");
+            if (!columnNames.buildingName) missing.push("'建案名稱'");
+
+            if(missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少必要的欄位 (${missing.join(', ')})，無法計算房屋單價分析。</p>`;
+                return;
+            }
+
+            const unitPrices = data.map(row => {
+                 const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[priceCol]) - safeParseFloat(row[columnNames.parkingPrice])));
+                 const area = safeParseFloat(row[columnNames.area]);
+                 if (area <= 0 || housePrice <= 0) return null;
+                 return { price: housePrice / area, name: row[columnNames.buildingName] };
+            }).filter(item => item !== null && isFinite(item.price));
+            
+            if(unitPrices.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center">沒有可用於單價分析的有效資料。</p>`;
+                return;
+            }
+
+            const priceValues = unitPrices.map(up => up.price);
+            const stats = calculateQuartiles(priceValues);
+            
+            const minProject = unitPrices.find(up => up.price === stats.min);
+            const maxProject = unitPrices.find(up => up.price === stats.max);
+            
+            let statsTable = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2 text-gray-700">單價統計資料</h3>
+                        <table class="w-full text-sm text-gray-500 analysis-table">
+                            <tbody>
+                                <tr class="border-b"><th class="py-2 px-4 bg-gray-50 font-medium text-left">統計項目</th><th class="py-2 px-4 bg-gray-50 font-medium">數值(萬元/坪)</th></tr>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">平均單價</td>${renderCell(formatNumber(stats.avg, true))}</tr>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">最低單價</td>${renderCell(formatNumber(stats.min, true))}</tr>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">1/4分位數單價</td>${renderCell(formatNumber(stats.q1, true))}</tr>
+                <tr class="border-b"><td class="py-2 px-4 text-left">中位數單價</td>${renderCell(formatNumber(stats.median, true))}</tr>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">3/4分位數單價</td>${renderCell(formatNumber(stats.q3, true))}</tr>
+                                <tr><td class="py-2 px-4 text-left">最高單價</td>${renderCell(formatNumber(stats.max, true))}</tr>
+                            </tbody>
+                        </table>
+                        <div class="mt-6">
+                            <h3 class="text-xl font-semibold mb-2 text-gray-700">極值建案資訊</h3>
+                            <div class="space-y-2 text-sm">
+                                <p><strong>最低房屋單價:</strong> ${formatNumber(stats.min, true)} 萬元/坪 (建案名稱: ${minProject ? minProject.name : 'N/A'})</p>
+                                <p><strong>最高房屋單價:</strong> ${formatNumber(stats.max, true)} 萬元/坪 (建案名稱: ${maxProject ? maxProject.name : 'N/A'})</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                         <h3 class="text-xl font-semibold mb-2 text-gray-700">房屋單價分布</h3>
+                         <p class="text-sm text-gray-500 mb-2">級距為 5 萬/坪</p>
+                        <canvas id="unitPriceChart"></canvas>
+                    </div>
+                </div>`;
+            container.innerHTML = statsTable;
+
+            const chartCtx = document.getElementById('unitPriceChart')?.getContext('2d');
+            if (window.unitPriceChart instanceof Chart) {
+                window.unitPriceChart.destroy();
+            }
+            const maxPriceVal = Math.ceil(stats.max / 5) * 5;
+            const labels = [];
+            for (let i = 0; i <= maxPriceVal; i += 5) { if(i+5 > stats.min) labels.push(`${i}-${i+5}`); }
+            const bucketData = new Array(labels.length).fill(0);
+            priceValues.forEach(p => {
+                const bucketIndex = Math.floor(p / 5);
+                const labelIndex = labels.findIndex(l => {
+                    const parts = l.split('-').map(Number);
+                    return p >= parts[0] && p < parts[1];
+                });
+                if (labelIndex !== -1) {
+                    bucketData[labelIndex]++;
+                }
+            });
+
+            window.unitPriceChart = new Chart(chartCtx, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: '交易筆數', data: bucketData, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }] },
+                options: { scales: { y: { beginAtZero: true, title: { display: true, text: '筆數' } }, x: { title: { display: true, text: '單價區間 (萬/坪)' } } }, plugins: { legend: { display: false } } }
+            });
+
+        }
+
+        function renderParkingPriceAnalysis(data) {
+             const container = document.getElementById('parking-price-content');
+            const missing = [];
+            if (!columnNames.parkingPrice) missing.push("'車位總價(萬)'");
+            if (!columnNames.parkingCount) missing.push("'車位數'");
+            if (!columnNames.parkingType) missing.push("'車位類型'");
+            
+            if(missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少必要的欄位 (${missing.join(', ')})，無法計算車位單價分析。</p>`;
+                return;
+            }
+
+            const withParking = data.filter(row => safeParseInt(row[columnNames.parkingCount]) > 0 && safeParseFloat(row[columnNames.parkingPrice]) > 0);
+            const withoutParking = data.length - withParking.length;
+            const total = data.length;
+
+            let tableHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2 text-gray-700">房車配比</h3>
+                        <table class="w-full text-sm text-gray-500 analysis-table">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr><th class="py-2 px-4 border text-left">配置類型</th><th class="py-2 px-4 border">交易筆數</th><th class="py-2 px-4 border">佔比</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">有搭車位</td>${renderCell(formatNumber(withParking.length))}</td>${renderCell(total > 0 ? formatNumber((withParking.length / total) * 100, true) + '%' : '0.00%')}</td></tr>
+                                <tr class="border-b"><td class="py-2 px-4 text-left">沒搭車位</td>${renderCell(formatNumber(withoutParking))}</td>${renderCell(total > 0 ? formatNumber((withoutParking / total) * 100, true) + '%' : '0.00%')}</td></tr>
+                                <tr class="font-bold bg-gray-50"><td class="py-2 px-4 text-left">總計</td>${renderCell(formatNumber(total))}</td>${renderCell('100.00%')}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2 text-gray-700">各類型車位平均單價</h3>`;
+            
+            const parkingByType = data.reduce((acc, row) => {
+                const type = row[columnNames.parkingType] || '未知';
+                const pPrice = safeParseFloat(row[columnNames.parkingPrice]);
+                const pCount = safeParseInt(row[columnNames.parkingCount]) || 1; // Default to 1 if count is 0 but price exists
+                if(pPrice > 0){
+                    if (!acc[type]) {
+                        acc[type] = { totalValue: 0, totalCount: 0, transactionCount: 0 };
+                    }
+                    acc[type].totalValue += pPrice;
+                    acc[type].totalCount += pCount;
+                    acc[type].transactionCount++;
+                }
+                return acc;
+            }, {});
+
+            if(Object.keys(parkingByType).length > 0) {
+                tableHTML += `<table class="w-full text-sm text-gray-500 analysis-table">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr><th class="py-2 px-4 border text-left">車位類型</th><th class="py-2 px-4 border">交易筆數</th><th class="py-2 px-4 border">車位平均單價</th></tr>
+                                </thead>
+                                <tbody>`;
+                Object.keys(parkingByType).sort().forEach(type => {
+                    const d = parkingByType[type];
+                    const avgPrice = d.totalCount > 0 ? d.totalValue / d.totalCount : 0;
+                    tableHTML += `<tr class="border-b"><td class="py-2 px-4 text-left">${type}</td>${renderCell(formatNumber(d.transactionCount))}${renderCell(formatNumber(avgPrice))}</tr>`;
+                });
+                tableHTML += `</tbody></table>`;
+            } else {
+                tableHTML += `<p class="text-gray-500 text-center mt-4">沒有可分析的車位資料。</p>`;
+            }
+            
+            tableHTML += `</div></div>`;
+            container.innerHTML = tableHTML;
+        }
+
+        const renderTimeBasedHeader = () => `
+            <tr>
+                <th rowspan="2" class="px-2 py-3 border">期間</th>
+                <th colspan="3" class="px-2 py-3 border text-center">2房去化</th>
+                <th colspan="3" class="px-2 py-3 border text-center">3房去化</th>
+                <th colspan="3" class="px-2 py-3 border text-center">總計</th>
+            </tr>
+            <tr>
+                <th class="px-2 py-3 border">資料筆數</th><th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">房屋坪數(坪)</th>
+                <th class="px-2 py-3 border">資料筆數</th><th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">房屋坪數(坪)</th>
+                <th class="px-2 py-3 border">資料筆數</th><th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">房屋坪數(坪)</th>
+            </tr>`;
+
+        function renderTimeBasedSales(container, data, periodType) {
+            const missing = ['date', 'room', 'totalPrice', 'area'].filter(key => !columnNames[key]);
+            if (missing.length > 0) {
+               container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少欄位 (${missing.join(', ')})，無法計算。</p>`;
+               return;
+            }
+
+            const periodData = {};
+            data.forEach(row => {
+                const date = parseDateString(row[columnNames.date]);
+                if (!date) return;
+                let key;
+                if (periodType === 'annual') key = date.getFullYear() + '年';
+                else if (periodType === 'quarterly') key = `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
+                else if (periodType === 'monthly') key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!periodData[key]) {
+                    periodData[key] = { '2房': { count: 0, price: 0, area: 0 }, '3房': { count: 0, price: 0, area: 0 }, '總計': { count: 0, price: 0, area: 0 } };
+                }
+                const roomCount = safeParseInt(row[columnNames.room]);
+                const price = safeParseFloat(row[columnNames.totalPrice]);
+                const area = safeParseFloat(row[columnNames.area]);
+
+                periodData[key]['總計'].count++;
+                periodData[key]['總計'].price += price;
+                periodData[key]['總計'].area += area;
+
+                if (roomCount === 2) {
+                    periodData[key]['2房'].count++;
+                    periodData[key]['2房'].price += price;
+                    periodData[key]['2房'].area += area;
+                } else if (roomCount === 3) {
+                    periodData[key]['3房'].count++;
+                    periodData[key]['3房'].price += price;
+                    periodData[key]['3房'].area += area;
+                }
+            });
+
+            let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table"><thead class="text-xs text-gray-700 uppercase bg-gray-100">${renderTimeBasedHeader()}</thead><tbody>`;
+            const total = { '2房': { count: 0, price: 0, area: 0 }, '3房': { count: 0, price: 0, area: 0 }, '總計': { count: 0, price: 0, area: 0 } };
+            
+            Object.keys(periodData).sort().forEach(key => {
+                tableHTML += `<tr class="bg-white border-b hover:bg-gray-50"><td class="border px-2 py-2 font-medium">${key}</td>`;
+                ['2房', '3房', '總計'].forEach(type => {
+                    const d = periodData[key][type];
+                    tableHTML += renderCell(formatNumber(d.count)) + renderCell(formatNumber(d.price)) + renderCell(formatNumber(d.area, true));
+                    total[type].count += d.count;
+                    total[type].price += d.price;
+                    total[type].area += d.area;
+                });
+                tableHTML += `</tr>`;
+            });
+            
+            tableHTML += `<tr class="bg-gray-100 font-bold"><td class="border px-2 py-2">總計</td>`;
+            ['2房', '3房', '總計'].forEach(type => {
+                const d = total[type];
+                tableHTML += renderCell(formatNumber(d.count)) + renderCell(formatNumber(d.price)) + renderCell(formatNumber(d.area, true));
+            });
+            tableHTML += `</tr></tbody></table></div>`;
+            container.innerHTML = tableHTML;
+        }
+        const renderAnnualSales = (data) => renderTimeBasedSales(document.getElementById('annual-sales-content'), data, 'annual');
+        const renderQuarterlySales = (data) => renderTimeBasedSales(document.getElementById('quarterly-sales-content'), data, 'quarterly');
+        const renderMonthlySales = (data) => renderTimeBasedSales(document.getElementById('monthly-sales-content'), data, 'monthly');
+        
+        function renderCaseRanking(data, sortKey = 'avgUnitPrice') {
+            caseRankingSortKey = sortKey; // Update global state
+            const container = document.getElementById('case-ranking-content');
+            const required = ['buildingName', 'area', 'totalPrice'];
+            const missing = required.filter(key => !columnNames[key]);
+            if (missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少欄位 (${missing.join(', ')})，無法計算個案排名。</p>`;
+                return;
+            }
+            
+            const overallTotalPrice = data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.totalPrice]), 0);
+
+            const projects = data.reduce((acc, row) => {
+                const name = row[columnNames.buildingName];
+                if (!name) return acc;
+                if (!acc[name]) {
+                    acc[name] = { name, areaSum: 0, priceSum: 0, count: 0, unitPrices: [], parkingPrices: [] };
+                }
+                const project = acc[name];
+                project.count++;
+                project.areaSum += safeParseFloat(row[columnNames.area]);
+                project.priceSum += safeParseFloat(row[columnNames.totalPrice]);
+
+                const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
+                const area = safeParseFloat(row[columnNames.area]);
+                if (area > 0 && housePrice > 0) project.unitPrices.push(housePrice / area);
+
+                const pCount = safeParseInt(row[columnNames.parkingCount]) || 1;
+                const pPrice = safeParseFloat(row[columnNames.parkingPrice]);
+                if (pPrice > 0) {
+                     project.parkingPrices.push(pPrice / pCount);
+                }
+                return acc;
+            }, {});
+            
+            const grandTotal = {
+                areaSum: data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.area]), 0),
+                count: data.length,
+                priceSum: overallTotalPrice,
+            };
+
+            const processedProjects = Object.values(projects).map(p => {
+                const unitPriceStats = calculateQuartiles(p.unitPrices);
+                const parkingPriceStats = calculateQuartiles(p.parkingPrices);
+                return {
+                    ...p,
+                    avgUnitPrice: unitPriceStats.avg,
+                    minUnitPrice: unitPriceStats.min,
+                    maxUnitPrice: unitPriceStats.max,
+                    medianUnitPrice: unitPriceStats.median,
+                    avgParkingPrice: parkingPriceStats.avg,
+                    marketShare: overallTotalPrice > 0 ? (p.priceSum / overallTotalPrice) * 100 : 0,
+                };
+            });
+            
+            processedProjects.sort((a, b) => b[sortKey] - a[sortKey]);
+            const rankedProjects = processedProjects.slice(0, 15);
+            
+            const sortButtons = `
+                <div class="flex items-center space-x-2 mb-4">
+                    <span class="text-sm font-medium">排序依據:</span>
+                    <button data-sort-key="avgUnitPrice" class="sort-button ${sortKey === 'avgUnitPrice' ? 'active' : ''}">平均單價</button>
+                    <button data-sort-key="priceSum" class="sort-button ${sortKey === 'priceSum' ? 'active' : ''}">產權總價</button>
+                    <button data-sort-key="areaSum" class="sort-button ${sortKey === 'areaSum' ? 'active' : ''}">房屋坪數</button>
+                    <button data-sort-key="count" class="sort-button ${sortKey === 'count' ? 'active' : ''}">資料筆數</button>
+                </div>
+            `;
+
+             let tableHTML = `${sortButtons}<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                    <tr>
+                        <th class="px-2 py-3 border">排名</th>
+                        <th class="px-2 py-3 border text-left">建案名稱</th>
+                        <th class="px-2 py-3 border">房屋坪數(坪)</th>
+                        <th class="px-2 py-3 border">資料筆數</th>
+                        <th class="px-2 py-3 border">產權總價(萬)</th>
+                        <th class="px-2 py-3 border">市場佔比(%)</th>
+                        <th class="px-2 py-3 border">平均單價(萬)</th>
+                        <th class="px-2 py-3 border">最低單價(萬)</th>
+                        <th class="px-2 py-3 border">最高單價(萬)</th>
+                        <th class="px-2 py-3 border">單價中位數(萬)</th>
+                        <th class="px-2 py-3 border">車位平均單價</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            
+            rankedProjects.forEach((p, index) => {
+                tableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
+                    ${renderCell(index + 1)}
+                    <td class="border px-2 py-2 text-left">${p.name}</td>
+                    ${renderCell(formatNumber(p.areaSum, true))}
+                    ${renderCell(formatNumber(p.count))}
+                    ${renderCell(formatNumber(p.priceSum))}
+                    ${renderCell(formatNumber(p.marketShare, true))}
+                    ${renderCell(formatNumber(p.avgUnitPrice, true))}
+                    ${renderCell(formatNumber(p.minUnitPrice, true))}
+                    ${renderCell(formatNumber(p.maxUnitPrice, true))}
+                    ${renderCell(formatNumber(p.medianUnitPrice, true))}
+                    ${renderCell(formatNumber(p.avgParkingPrice))}
+                </tr>`;
+            });
+
+            tableHTML += `</tbody><tfoot class="bg-gray-100 font-bold">
+                <tr>
+                    <td class="border px-2 py-2 text-center" colspan="2">總計 (所有篩選資料)</td>
+                    ${renderCell(formatNumber(grandTotal.areaSum, true))}
+                    ${renderCell(formatNumber(grandTotal.count))}
+                    ${renderCell(formatNumber(grandTotal.priceSum))}
+                    <td class="border px-2 py-2 text-center" colspan="6">-</td>
+                </tr>
+            </tfoot></table></div>`;
+            container.innerHTML = tableHTML;
+
+            // Add event listeners to new sort buttons
+            container.querySelectorAll('.sort-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    renderCaseRanking(data, e.target.dataset.sortKey);
+                });
+            });
+        }
+
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            if(document.getElementById(`${tabId}-content`)) {
+                document.getElementById(`${tabId}-content`).classList.add('active');
+            }
+            if(document.querySelector(`[data-tab='${tabId}']`)) {
+                document.querySelector(`[data-tab='${tabId}']`).classList.add('active');
+            }
+        }
+        
+        // --- Event Listeners ---
+        csvFileInput.addEventListener('change', fileInputHandler);
+        [districtFilter, startDateInput, endDateInput].forEach(el => {
+            el.addEventListener('change', applyFilters);
+        });
+        buildingNameSearch.addEventListener('input', applyFilters);
+        searchModeToggle.addEventListener('change', () => {
+            searchModeLabel.textContent = searchModeToggle.checked ? '精準' : '模糊';
+            applyFilters();
+        });
+        generateReportBtn.addEventListener('click', generateAnalysisReport);
+
+        tabContainer.addEventListener('click', (e) => {
+            if (e.target.matches('.tab-button')) {
+                switchTab(e.target.dataset.tab);
+            }
+        });
+        
+        buildingTypeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            buildingTypeMenu.style.display = buildingTypeMenu.style.display === 'block' ? 'none' : 'block';
+        });
+
+        buildingTypeMenu.addEventListener('change', () => {
+            updateBuildingTypeButtonText();
+            applyFilters();
+        });
+
+        window.addEventListener('click', (e) => {
+            if (!buildingTypeContainer.contains(e.target)) buildingTypeMenu.style.display = 'none';
+            if (e.target == customAlert) hideAlert();
+            if (e.target.classList.contains('page-btn')) {
+                const type = e.target.dataset.type;
+                const dir = e.target.dataset.dir;
+                if (type === 'main') {
+                    currentPage += (dir === 'next' ? 1 : -1);
+                    renderTable(filteredData, currentPage);
+                } else if (type === 'anomaly') {
+                    currentAnomalyPage += (dir === 'next' ? 1 : -1);
+                    renderAnomalyTable(anomalousData, currentAnomalyPage);
+                }
+            }
+        });
+
+        async function exportReportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            
+            try {
+                // Attempt to add a CJK-supporting font.
+                // Note: This loads the font from a CDN. In a real-world, production environment,
+                // you would host this font file yourself.
+                doc.addFont('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0-beta.2/fonts/SourceHanSans/SourceHanSans-Normal.ttf', 'SourceHanSans', 'normal');
+                doc.setFont('SourceHanSans');
+            } catch (e) {
+                console.error("無法載入中文字體，PDF 中的中文可能無法正常顯示。", e);
+                doc.setFont('Helvetica'); 
+            }
+            
+            showLoader(true, '正在產生 PDF...');
+
+            const tabOrder = ['core-metrics', 'case-ranking', 'house-price-band', 'unit-price', 'parking-price', 'annual-sales', 'quarterly-sales', 'monthly-sales'];
+            const visibleTabs = tabOrder.filter(tabId => document.querySelector(`[data-tab='${tabId}']`)?.classList.contains('visible'));
+
+            for (let i = 0; i < visibleTabs.length; i++) {
+                const tabId = visibleTabs[i];
+                if (i > 0) doc.addPage();
+                
+                const element = document.getElementById(`${tabId}-content`);
+                const title = document.querySelector(`[data-tab='${tabId}']`).textContent;
+                
+                doc.setFontSize(18);
+                doc.text(title, 14, 20);
+
+                let startY = 30;
+
+                const allTables = element.querySelectorAll('table');
+                for (const table of allTables) {
+                    const header = table.closest('div').querySelector('h3');
+                     if(header && !header.closest('.grid')?.contains(table)) {
+                         doc.setFontSize(14);
+                         doc.text(header.textContent, 14, startY);
+                         startY += 8;
+                     }
+                     await doc.autoTable({ 
+                        html: table, 
+                        startY: startY, 
+                        theme: 'grid',
+                        styles: { font: 'SourceHanSans', fontStyle: 'normal' },
+                        headStyles: { fontStyle: 'bold' }
+                    });
+                     startY = doc.autoTable.previous.finalY + 10;
+                }
+
+                const allCanvases = element.querySelectorAll('canvas');
+                 for (const canvas of allCanvases) {
+                    const imgData = canvas.toDataURL('image/png', 1.0);
+                    const imgHeight = 80;
+                    const imgWidth = 180;
+                    if(startY + imgHeight > doc.internal.pageSize.getHeight() - 15) {
+                        doc.addPage();
+                        startY = 20;
+                    }
+                     const header = canvas.closest('div').querySelector('h3');
+                     if(header) {
+                         doc.setFontSize(14);
+                         doc.text(header.textContent, 14, startY);
+                         startY += 8;
+                     }
+                    doc.addImage(imgData, 'PNG', 15, startY, imgWidth, imgHeight);
+                    startY += imgHeight + 10;
+                }
+
+                if(allTables.length === 0 && allCanvases.length === 0) {
+                     const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgProps = doc.getImageProperties(imgData);
+                    const pdfWidth = doc.internal.pageSize.getWidth();
+                    const imgWidth = pdfWidth - 28;
+                    const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+                    if(startY + imgHeight > doc.internal.pageSize.getHeight() - 15) {
+                        doc.addPage();
+                        startY = 20;
+                    }
+                    doc.addImage(imgData, 'PNG', 14, startY, imgWidth, imgHeight);
+                }
+            }
+            
+            doc.save('房地產分析報告.pdf');
+            showLoader(false);
+        }
+
+        exportPdfBtn.addEventListener('click', exportReportToPDF);
+
+        function updateBuildingTypeButtonText() {
+            const allCheckboxes = document.querySelectorAll('.building-type-checkbox');
+            const checkedCheckboxes = document.querySelectorAll('.building-type-checkbox:checked');
+            document.getElementById('select-all-types').checked = allCheckboxes.length > 0 && allCheckboxes.length === checkedCheckboxes.length;
+            
+            const selectedCount = checkedCheckboxes.length;
+            const totalCount = allCheckboxes.length;
+
+            if (selectedCount === 0 || selectedCount === totalCount) {
+                buildingTypeButtonText.textContent = '所有類型';
+            } else {
+                 buildingTypeButtonText.textContent = `已選 ${selectedCount} 項`;
+            }
+        }
+    </script>
+</body>
+</html>
