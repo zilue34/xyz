@@ -316,12 +316,12 @@
                 <div class="border-b border-gray-200">
                     <nav class="-mb-px flex flex-wrap space-x-6" id="tabContainer">
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="price-grid">戶別價盤分析</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="floor-analysis">樓層價量分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="core-metrics">核心指標</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="case-ranking">個案排名</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="house-price-band">總價帶分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="unit-price">房屋單價</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="parking-price">車位單價</button>
-                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="floor-analysis">樓層價量分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="annual-sales">年度去化</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="quarterly-sales">每季去化</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="monthly-sales">每月去化</button>
@@ -330,12 +330,12 @@
                 </div>
                 <div class="pt-6">
                     <div id="price-grid-content" class="tab-content"></div>
+                    <div id="floor-analysis-content" class="tab-content"></div>
                     <div id="core-metrics-content" class="tab-content"></div>
                     <div id="case-ranking-content" class="tab-content"></div>
                     <div id="house-price-band-content" class="tab-content"></div>
                     <div id="unit-price-content" class="tab-content"></div>
                     <div id="parking-price-content" class="tab-content"></div>
-                    <div id="floor-analysis-content" class="tab-content"></div>
                     <div id="annual-sales-content" class="tab-content"></div>
                     <div id="quarterly-sales-content" class="tab-content"></div>
                     <div id="monthly-sales-content" class="tab-content"></div>
@@ -406,7 +406,7 @@
         let headers = [];
         let duplicateHashes = new Map();
         let columnNames = { district: null, buildingType: null, date: null, buildingName: null, totalPrice: null, area: null, housePrice: null, room: null, bathroom: null, parkingPrice: null, parkingCount: null, parkingType: null, floor: null, unitId: null };
-        let projectParsingRules = {}; // ★ 新增：儲存學習到的建案專屬解析規則
+        let projectParsingRules = {}; 
         let currentPage = 1;
         let currentAnomalyPage = 1;
         let caseRankingSortKey = 'avgUnitPrice';
@@ -457,30 +457,21 @@
 
         // --- Utility & Formatting Functions ---
         
-        /**
-         * ★ 智能戶別解析函式 V3.0 (學習型)
-         * @param {string} rawText - 原始戶別字串
-         * @param {string} buildingName - 該筆資料的建案名稱
-         * @param {string} floor - 該筆資料的樓層
-         * @returns {string} - 解析後的戶別
-         */
         function getUnitIdentifier(rawText, buildingName, floor) {
             if (!rawText || typeof rawText !== 'string') return '';
             
             const upperText = rawText.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).toUpperCase();
             
             // --- 應用階段 ---
-            // 優先使用為此建案學習到的專屬規則
             if (buildingName && projectParsingRules[buildingName]) {
                 const customParser = projectParsingRules[buildingName];
                 const result = customParser(upperText);
                 if (result) {
-                    return result; // 套用專屬規則成功，回傳結果
+                    return result; 
                 }
             }
 
             // --- 後備通用邏輯 (Fallback) ---
-            // 如果沒有專屬規則，或規則不適用於此特例，則執行通用判斷
             const floorNum = (floor && (String(floor).match(/\d+/) || [])[0]) || null;
             const cleanedText = upperText.replace(/[\d]+F/g, '').replace(/[棟號樓\-\/]/g, ' ').trim();
             const candidates = cleanedText.split(/\s+/).filter(p => /[A-Z0-9]/.test(p));
@@ -641,7 +632,6 @@
             Papa.parse(file, config);
         };
         
-        // ★ 新增：推斷建案命名規則的函式
         function deduceProjectPattern(projectRows) {
             const unitIdCol = columnNames.unitId;
             if (!unitIdCol) return null;
@@ -653,7 +643,7 @@
             ];
 
             const sample = projectRows.map(r => r[unitIdCol]).filter(Boolean).slice(0, 50);
-            if (sample.length < 5) return null; // 樣本太少，不進行推斷
+            if (sample.length < 5) return null;
 
             sample.forEach(unitStr => {
                 const upperText = unitStr.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).toUpperCase();
@@ -667,9 +657,7 @@
             templates.sort((a, b) => b.score - a.score);
             const bestPattern = templates[0];
             
-            // 設定一個門檻，避免偶然匹配導致錯誤推斷
             if (bestPattern.score > sample.length * 0.3 && bestPattern.score >= 3) {
-                console.log(`為建案推斷出解析規則: ${bestPattern.name}`);
                 return (text) => {
                     const match = text.match(bestPattern.regex);
                     return match ? bestPattern.parser(match) : null;
@@ -678,9 +666,8 @@
             return null;
         }
 
-        // ★ 新增：預運算所有建案的解析規則
         function precomputeParsingRules(data) {
-            projectParsingRules = {}; // 重置規則
+            projectParsingRules = {};
             const projectCol = columnNames.buildingName;
             if (!projectCol) return;
 
@@ -738,8 +725,6 @@
                         showAlert(`警告：在您的CSV檔案中找不到以下必要的欄位：${missingCols.join(', ')}。部分分析功能可能無法使用。`);
                     }
                     
-                    // --- 學習階段 ---
-                    // 在此預先運算，學習每個建案的專屬命名規則
                     showLoader(true, "正在學習戶別命名規則...");
                     setTimeout(() => {
                         precomputeParsingRules(fullData);
@@ -966,7 +951,6 @@
                 return;
             }
 
-            // Calculate duplicate hashes first
             duplicateHashes.clear();
             data.forEach(row => {
                 const rowCopy = {...row};
@@ -1027,7 +1011,6 @@
                 }
             });
             
-            // Update UI with counts
             document.querySelectorAll('[id^=anomaly][id$=Label]').forEach(label => {
                 const existingCount = label.querySelector('.anomaly-count');
                 if (existingCount) existingCount.remove();
@@ -1133,9 +1116,9 @@
                     if (exclusions.exclude3 && reasons.includes('疑似店面')) return false;
                     if (exclusions.exclude4 && reasons.includes('重複的資料')) {
                         if (seenHashes.has(rowHash)) {
-                            return false; // It's a subsequent duplicate, so remove it
+                            return false; 
                         }
-                        seenHashes.add(rowHash); // It's the first time we see this duplicate, mark it and let it pass this filter
+                        seenHashes.add(rowHash);
                     }
                 }
                 return true;
@@ -1171,12 +1154,12 @@
                 analysisSection.style.display = 'block';
 
                 renderPriceGridAnalysis(generalAnalysisData);
+                renderFloorAnalysis(generalAnalysisData);
                 renderCoreMetrics(generalAnalysisData);
                 renderCaseRanking(generalAnalysisData, caseRankingSortKey);
                 renderHousePriceBandAnalysis(generalAnalysisData);
                 renderUnitPriceAnalysis(generalAnalysisData);
                 renderParkingPriceAnalysis(parkingAnalysisData);
-                renderFloorAnalysis(generalAnalysisData);
                 renderAnnualSales(generalAnalysisData);
                 renderQuarterlySales(generalAnalysisData);
                 renderMonthlySales(generalAnalysisData);
@@ -1193,7 +1176,7 @@
             const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
             const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
             
-            let diffDays = 366; // Default to show all if no dates
+            let diffDays = 366; 
             if (startDate && endDate) {
                 const diffTime = Math.abs(endDate - startDate);
                 diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -1204,10 +1187,13 @@
             const isSingleProject = uniqueBuildingNames.size === 1;
 
             const tabs = {
+                // ★ 修改：同步顯示邏輯
                 'price-grid': isPriceGridToggleOn && isSingleProject,
+                'floor-analysis': isPriceGridToggleOn && isSingleProject,
+                
                 'core-metrics': true, 'case-ranking': true,
                 'house-price-band': true, 'unit-price': true,
-                'parking-price': true, 'floor-analysis': true,
+                'parking-price': true, 
                 'annual-sales': diffDays > 365, 'quarterly-sales': diffDays > 90,
                 'monthly-sales': diffDays > 28 && diffDays <= 1095,
                 'weekly-sales': diffDays <= 366,
@@ -1819,7 +1805,7 @@
             }
 
             const sortedUnitIds = [...unitIds].sort(alphanumericSort);
-            const sortedFloors = [...floors].sort((a, b) => b - a); // 由高到低
+            const sortedFloors = [...floors].sort((a, b) => b - a);
 
             let tableHTML = `<h3 class="text-xl font-semibold mb-4 text-gray-800">建案：${buildingName}</h3>`;
             tableHTML += `<div class="overflow-x-auto border rounded-lg"><table class="w-full text-sm text-gray-500 analysis-table">
@@ -1999,6 +1985,13 @@
                         headStyles: { fontStyle: 'bold' }
                     });
                      startY = doc.autoTable.previous.finalY + 10;
+                }
+
+                if (i > 0 && isPriceGrid) {
+                     doc.addPage('a4', 'portrait');
+                } else if (isPriceGrid) {
+                    doc.setPage(doc.internal.getNumberOfPages());
+                    doc.internal.pageSize.setPage('a4', 'portrait');
                 }
 
                 const allCanvases = element.querySelectorAll('canvas');
