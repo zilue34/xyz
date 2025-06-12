@@ -24,10 +24,10 @@
         .table-container {
             overflow-x: auto;
         }
-        .table-container::-webkit-scrollbar, .dropdown-checkbox-menu::-webkit-scrollbar { width: 8px; }
-        .table-container::-webkit-scrollbar-track, .dropdown-checkbox-menu::-webkit-scrollbar-track { background: #f1f5f9; }
-        .table-container::-webkit-scrollbar-thumb, .dropdown-checkbox-menu::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
-        .table-container::-webkit-scrollbar-thumb:hover, .dropdown-checkbox-menu::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .table-container::-webkit-scrollbar, .dropdown-checkbox-menu::-webkit-scrollbar, #pdfExportModalBody::-webkit-scrollbar { width: 8px; }
+        .table-container::-webkit-scrollbar-track, .dropdown-checkbox-menu::-webkit-scrollbar-track, #pdfExportModalBody::-webkit-scrollbar-track { background: #f1f5f9; }
+        .table-container::-webkit-scrollbar-thumb, .dropdown-checkbox-menu::-webkit-scrollbar-thumb, #pdfExportModalBody::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover, .dropdown-checkbox-menu::-webkit-scrollbar-thumb:hover, #pdfExportModalBody::-webkit-scrollbar-thumb:hover { background: #64748b; }
         
         .loader {
             border: 5px solid #f3f3f3; border-top: 5px solid #3498db;
@@ -40,17 +40,30 @@
             display: none; position: fixed; z-index: 1000;
             left: 0; top: 0; width: 100%; height: 100%;
             background-color: rgba(0,0,0,0.4); transition: opacity 0.3s ease;
+            justify-content: center; align-items: center;
         }
+        .modal.flex { display: flex; }
         .modal-content {
-            background-color: #fefefe; margin: 15% auto; padding: 24px;
-            border-radius: 12px; width: 90%; max-width: 450px;
+            background-color: #fefefe; padding: 24px;
+            border-radius: 12px; width: 90%;
             text-align: center; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
-            transform: translateY(-50px); transition: transform 0.3s ease;
+            transform: translateY(-50px) scale(0.95); transition: all 0.3s ease;
         }
+        .modal.flex .modal-content {
+             transform: translateY(0) scale(1);
+        }
+
+        .modal-content-sm { max-width: 450px; margin: auto; }
+        .modal-content-md { max-width: 500px; text-align: left; }
+        
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; }
+        .modal-title { font-size: 1.25rem; font-weight: 600; color: #1f2937; }
         .modal-close {
-            color: #aaa; float: right; font-size: 28px; font-weight: bold; line-height: 1; cursor: pointer;
+            color: #9ca3af; background: none; border: none; font-size: 28px; line-height: 1; cursor: pointer;
         }
-        .modal-close:hover, .modal-close:focus { color: black; text-decoration: none; }
+        .modal-close:hover, .modal-close:focus { color: black; }
+        .modal-body { padding-top: 1rem; padding-bottom: 1rem; }
+        .modal-footer { border-top: 1px solid #e5e7eb; padding-top: 1rem; text-align: right; }
 
         .dropdown-checkbox-container { position: relative; display: inline-block; width: 100%; }
         .dropdown-checkbox-button {
@@ -67,9 +80,9 @@
         .dropdown-checkbox-menu label { display: block; padding: 8px 12px; cursor: pointer; }
         .dropdown-checkbox-menu label:hover { background-color: #f3f4f6; }
 
-        #searchModeToggle:checked ~ .dot { transform: translateX(1rem); }
-        #searchModeToggle:checked ~ .toggle-bg { background-color: #3b82f6; }
-        #searchModeToggle:disabled ~ * { cursor: not-allowed; opacity: 0.5; }
+        .toggle-switch:checked ~ .dot { transform: translateX(1rem); }
+        .toggle-switch:checked ~ .toggle-bg { background-color: #3b82f6; }
+        .toggle-switch:disabled ~ * { cursor: not-allowed; opacity: 0.5; }
 
         .tab-button {
             transition: all 0.3s ease;
@@ -83,10 +96,19 @@
 
         .sort-button { @apply px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition-colors; }
         .sort-button.active { @apply bg-blue-500 text-white border-blue-500; }
+        
+        /* Table centering and no-wrap styles */
+        .styled-table th, .styled-table td {
+            text-align: center;
+            white-space: nowrap;
+        }
+        .styled-table .text-left {
+            text-align: left;
+        }
 
         .analysis-table th, .analysis-table td { text-align: center; }
         .analysis-table .text-left { text-align: left; }
-
+        
         .anomaly-count {
             @apply ml-2 bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full;
         }
@@ -95,13 +117,11 @@
 <body class="bg-gray-50 text-gray-800 p-4 md:p-8">
 
     <div class="max-w-7xl mx-auto">
-        <!-- Header -->
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold title-gradient">房地產資料篩選與分析儀表板</h1>
             <p class="mt-2 text-gray-600">上傳您的CSV檔案，篩選資料並產生分析報告。</p>
         </header>
 
-        <!-- Loading Indicator -->
         <div id="loader" class="hidden fixed top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
             <div class="text-center">
                 <div class="loader mx-auto"></div>
@@ -109,18 +129,47 @@
             </div>
         </div>
         
-        <!-- Custom Alert Modal -->
         <div id="customAlert" class="modal">
-          <div class="modal-content">
-            <span class="modal-close" id="modalClose">&times;</span>
+          <div class="modal-content modal-content-sm">
+            <span class="modal-close" id="alertModalClose">&times;</span>
             <p id="alertMessage" class="my-4 text-lg text-gray-700"></p>
           </div>
         </div>
+        
+        <div id="exportChoiceModal" class="modal">
+            <div class="modal-content modal-content-sm">
+                <div class="modal-header">
+                    <h5 class="modal-title">選擇匯出格式</h5>
+                    <button type="button" class="modal-close" id="exportChoiceModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-4 text-gray-600">您想要如何匯出您的分析報告？</p>
+                    <div class="flex justify-center gap-4">
+                        <button id="exportPdfChoiceBtn" class="flex-1 bg-red-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-600 transition-colors">匯出 PDF</button>
+                        <button id="exportClipboardChoiceBtn" class="flex-1 bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors">複製到剪貼簿</button>
+                    </div>
+                     <p class="mt-3 text-xs text-gray-500">「複製到剪貼簿」選項可讓您輕鬆將報告貼至 Google 文件或 Word。</p>
+                </div>
+            </div>
+        </div>
 
-        <!-- Filters and Controls Section -->
+        <div id="sectionSelectModal" class="modal">
+            <div class="modal-content modal-content-md">
+                <div class="modal-header">
+                    <h5 class="modal-title">選擇要匯出的報告區塊</h5>
+                    <button type="button" class="modal-close" id="sectionSelectModalClose">&times;</button>
+                </div>
+                <div class="modal-body" id="sectionSelectModalBody" style="max-height: 400px; overflow-y: auto;">
+                    </div>
+                <div class="modal-footer space-x-2">
+                    <button type="button" id="sectionSelectAllBtn" class="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">全部選取</button>
+                    <button type="button" id="confirmExportBtn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">確認匯出</button>
+                </div>
+            </div>
+        </div>
+
         <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Left Column: Filters -->
                 <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label for="csvFile" class="block text-sm font-medium text-gray-700 mb-2">1. 選擇CSV檔案</label>
@@ -131,11 +180,20 @@
                      <div>
                         <label for="buildingNameSearch" class="block text-sm font-medium text-gray-700 mb-2">4. 建案名稱搜尋</label>
                         <input type="text" id="buildingNameSearch" placeholder="輸入建案關鍵字..." class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
-                        <div class="flex items-center justify-end mt-2 h-6">
-                            <label for="searchModeToggle" class="flex items-center cursor-pointer">
-                                <span class="mr-3 text-sm font-medium text-gray-700" id="searchModeLabel">模糊</span>
+                        
+                        <div class="flex items-center justify-end mt-2 h-6 space-x-4">
+                            <label for="priceGridToggle" class="flex items-center cursor-pointer" title="啟用後，若篩選結果為單一建案，將產生戶別價盤分析表">
+                                <span class="mr-2 text-sm font-medium text-gray-700" id="priceGridLabel">價盤分析</span>
                                 <div class="relative">
-                                    <input type="checkbox" id="searchModeToggle" class="sr-only" disabled>
+                                    <input type="checkbox" id="priceGridToggle" class="toggle-switch sr-only" disabled>
+                                    <div class="toggle-bg block bg-gray-200 w-10 h-6 rounded-full"></div>
+                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out"></div>
+                                </div>
+                            </label>
+                            <label for="searchModeToggle" class="flex items-center cursor-pointer">
+                                <span class="mr-2 text-sm font-medium text-gray-700" id="searchModeLabel">模糊</span>
+                                <div class="relative">
+                                    <input type="checkbox" id="searchModeToggle" class="toggle-switch sr-only" disabled>
                                     <div class="toggle-bg block bg-gray-200 w-10 h-6 rounded-full"></div>
                                     <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out"></div>
                                 </div>
@@ -160,7 +218,6 @@
                     </div>
                 </div>
 
-                <!-- Right Column: Date & Action -->
                 <div class="lg:col-span-1 flex flex-col justify-between">
                      <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">5. 交易時間</label>
@@ -178,11 +235,10 @@
                 </div>
             </div>
 
-            <!-- Anomaly Filters -->
             <div id="anomalyFilterSection" class="mt-6 pt-6 border-t border-gray-200 hidden">
                 <h3 class="text-lg font-semibold text-gray-800 mb-3">異常資料篩選</h3>
                 <p class="text-sm text-gray-600 mb-4">勾選您想從「分析報告」中排除的異常資料類型。</p>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <label class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer">
                         <input type="checkbox" id="anomaly1" name="anomaly" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5">
                         <span class="ml-3 text-sm">
@@ -204,17 +260,23 @@
                             <p class="text-gray-500">1樓成交且單價顯著高於建案平均。</p>
                         </span>
                     </label>
+                    <label class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+                        <input type="checkbox" id="anomaly4" name="anomaly" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5">
+                        <span class="ml-3 text-sm">
+                            <strong class="font-semibold text-gray-900" id="anomaly4Label">重複的資料</strong>
+                            <p class="text-gray-500">排除內容完全相同的重複紀錄 (保留一筆)。</p>
+                        </span>
+                    </label>
                 </div>
             </div>
         </div>
 
 
-        <!-- Results Section -->
         <h2 class="text-2xl font-bold text-gray-800 mb-4">篩選結果</h2>
         <div id="resultsSummary" class="mb-4 text-center h-6 font-medium"></div>
         <div class="bg-white rounded-2xl shadow-lg p-4">
              <div class="table-container rounded-lg border">
-                <table class="min-w-full divide-y divide-gray-200">
+                <table class="min-w-full divide-y divide-gray-200 styled-table">
                     <thead class="bg-gray-50 sticky top-0 z-10">
                         <tr id="tableHeader"></tr>
                     </thead>
@@ -223,62 +285,61 @@
                     </tbody>
                 </table>
              </div>
-             <!-- Pagination Controls -->
              <div id="paginationControls" class="flex items-center justify-between mt-4"></div>
         </div>
         
-        <!-- Anomaly Results Section -->
         <div id="anomalyResultsSection" class="mt-12 hidden">
             <h2 class="text-2xl font-bold text-gray-800 mb-4">異常資料列表</h2>
             <div id="anomalySummary" class="mb-4 text-center h-6 font-medium"></div>
             <div class="bg-white rounded-2xl shadow-lg p-4">
                  <div class="table-container rounded-lg border">
-                    <table class="min-w-full divide-y divide-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 styled-table">
                         <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr id="anomalyTableHeader"></tr>
                         </thead>
                         <tbody id="anomalyTableBody" class="bg-white divide-y divide-gray-200">
-                            <!-- Content generated by JS -->
-                        </tbody>
+                            </tbody>
                     </table>
                  </div>
-                 <!-- Anomaly Pagination Controls -->
                  <div id="anomalyPaginationControls" class="flex items-center justify-between mt-4"></div>
             </div>
         </div>
 
-        <!-- Analysis Report Section -->
         <div id="analysisSection" class="mt-12 hidden">
              <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-gray-800">分析報告</h2>
-                <button id="exportPdfBtn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors duration-300">
-                    匯出 PDF
+                <button id="mainExportBtn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors duration-300">
+                    匯出報告
                 </button>
              </div>
              <div id="report-content-wrapper" class="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
-                <!-- Tab Buttons -->
                 <div class="border-b border-gray-200">
                     <nav class="-mb-px flex flex-wrap space-x-6" id="tabContainer">
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="price-grid">戶別價盤分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="core-metrics">核心指標</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="case-ranking">個案排名</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="house-price-band">總價帶分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="unit-price">房屋單價</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="parking-price">車位單價</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="floor-analysis">樓層價量分析</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="annual-sales">年度去化</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="quarterly-sales">每季去化</button>
                         <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="monthly-sales">每月去化</button>
+                        <button class="tab-button py-4 px-1 text-lg font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap" data-tab="weekly-sales">每週去化</button>
                     </nav>
                 </div>
-                <!-- Tab Content -->
                 <div class="pt-6">
+                    <div id="price-grid-content" class="tab-content"></div>
                     <div id="core-metrics-content" class="tab-content"></div>
                     <div id="case-ranking-content" class="tab-content"></div>
                     <div id="house-price-band-content" class="tab-content"></div>
                     <div id="unit-price-content" class="tab-content"></div>
                     <div id="parking-price-content" class="tab-content"></div>
+                    <div id="floor-analysis-content" class="tab-content"></div>
                     <div id="annual-sales-content" class="tab-content"></div>
                     <div id="quarterly-sales-content" class="tab-content"></div>
                     <div id="monthly-sales-content" class="tab-content"></div>
+                    <div id="weekly-sales-content" class="tab-content"></div>
                 </div>
              </div>
         </div>
@@ -290,11 +351,12 @@
         const districtFilter = document.getElementById('districtFilter');
         const buildingNameSearch = document.getElementById('buildingNameSearch');
         const searchModeToggle = document.getElementById('searchModeToggle');
+        const priceGridToggle = document.getElementById('priceGridToggle'); 
         const searchModeLabel = document.getElementById('searchModeLabel');
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
         const generateReportBtn = document.getElementById('generateReportBtn');
-        const exportPdfBtn = document.getElementById('exportPdfBtn');
+        const mainExportBtn = document.getElementById('mainExportBtn');
         const tableHeader = document.getElementById('tableHeader');
         const tableBody = document.getElementById('tableBody');
         const resultsSummary = document.getElementById('resultsSummary');
@@ -303,9 +365,23 @@
         const tabContainer = document.getElementById('tabContainer');
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loaderText');
+        
+        // Modals
         const customAlert = document.getElementById('customAlert');
         const alertMessage = document.getElementById('alertMessage');
-        const modalClose = document.getElementById('modalClose');
+        const alertModalClose = document.getElementById('alertModalClose');
+        
+        const exportChoiceModal = document.getElementById('exportChoiceModal');
+        const exportChoiceModalClose = document.getElementById('exportChoiceModalClose');
+        const exportPdfChoiceBtn = document.getElementById('exportPdfChoiceBtn');
+        const exportClipboardChoiceBtn = document.getElementById('exportClipboardChoiceBtn');
+
+        const sectionSelectModal = document.getElementById('sectionSelectModal');
+        const sectionSelectModalClose = document.getElementById('sectionSelectModalClose');
+        const sectionSelectModalBody = document.getElementById('sectionSelectModalBody');
+        const confirmExportBtn = document.getElementById('confirmExportBtn');
+        const sectionSelectAllBtn = document.getElementById('sectionSelectAllBtn');
+
         const buildingTypeContainer = document.getElementById('buildingTypeContainer');
         const buildingTypeButton = document.getElementById('buildingTypeButton');
         const buildingTypeButtonText = document.getElementById('buildingTypeButtonText');
@@ -316,33 +392,63 @@
         const anomalyTableBody = document.getElementById('anomalyTableBody');
         const anomalySummary = document.getElementById('anomalySummary');
         const anomalyPaginationControls = document.getElementById('anomalyPaginationControls');
+        
+        // Anomaly labels
         const anomaly1Label = document.getElementById('anomaly1Label');
         const anomaly2Label = document.getElementById('anomaly2Label');
         const anomaly3Label = document.getElementById('anomaly3Label');
+        const anomaly4Label = document.getElementById('anomaly4Label');
 
         // Global state
         let fullData = [];
         let filteredData = [];
         let anomalousData = [];
         let headers = [];
-        let columnNames = { district: null, buildingType: null, date: null, buildingName: null, totalPrice: null, area: null, housePrice: null, room: null, bathroom: null, parkingPrice: null, parkingCount: null, parkingType: null, floor: null };
+        let duplicateHashes = new Map();
+        let columnNames = { district: null, buildingType: null, date: null, buildingName: null, totalPrice: null, area: null, housePrice: null, room: null, bathroom: null, parkingPrice: null, parkingCount: null, parkingType: null, floor: null, unitId: null };
+        let projectParsingRules = {}; // ★ 新增：儲存學習到的建案專屬解析規則
         let currentPage = 1;
         let currentAnomalyPage = 1;
-        let caseRankingSortKey = 'avgUnitPrice'; // Default sort key
+        let caseRankingSortKey = 'avgUnitPrice';
+        let currentExportFormat = 'pdf';
         const ROWS_PER_PAGE = 30;
 
-        // --- Custom Alert ---
+        // --- Custom Modals ---
         function showAlert(message) {
             alertMessage.textContent = message;
-            customAlert.style.display = 'block';
-            setTimeout(() => { customAlert.style.opacity = 1; customAlert.querySelector('.modal-content').style.transform = 'translateY(0)'; }, 10);
+            customAlert.classList.add('flex');
         }
         function hideAlert() {
-            customAlert.style.opacity = 0;
-            customAlert.querySelector('.modal-content').style.transform = 'translateY(-50px)';
-            setTimeout(() => customAlert.style.display = 'none', 300);
+            customAlert.classList.remove('flex');
         }
-        modalClose.onclick = hideAlert;
+        alertModalClose.onclick = hideAlert;
+
+        function showSectionSelectModal(format) {
+            currentExportFormat = format;
+            sectionSelectModalBody.innerHTML = '';
+            const visibleTabs = document.querySelectorAll('.tab-button.visible');
+            if(visibleTabs.length === 0) {
+                showAlert('沒有可匯出的分析報告。請先產生報告。');
+                return;
+            }
+            visibleTabs.forEach(tab => {
+                const tabId = tab.dataset.tab;
+                const tabName = tab.textContent;
+                const checkboxHTML = `
+                    <label class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer">
+                        <input type="checkbox" data-tab-id="${tabId}" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 export-section-checkbox" checked>
+                        <span class="ml-3 text-sm font-medium text-gray-700">${tabName}</span>
+                    </label>
+                `;
+                sectionSelectModalBody.insertAdjacentHTML('beforeend', checkboxHTML);
+            });
+            sectionSelectModal.classList.add('flex');
+        }
+
+        function hideSectionSelectModal() {
+            sectionSelectModal.classList.remove('flex');
+        }
+        sectionSelectModalClose.onclick = hideSectionSelectModal;
         
         function showLoader(show, text = "讀取中...") {
             loaderText.textContent = text;
@@ -350,6 +456,76 @@
         }
 
         // --- Utility & Formatting Functions ---
+        
+        /**
+         * ★ 智能戶別解析函式 V3.0 (學習型)
+         * @param {string} rawText - 原始戶別字串
+         * @param {string} buildingName - 該筆資料的建案名稱
+         * @param {string} floor - 該筆資料的樓層
+         * @returns {string} - 解析後的戶別
+         */
+        function getUnitIdentifier(rawText, buildingName, floor) {
+            if (!rawText || typeof rawText !== 'string') return '';
+            
+            const upperText = rawText.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).toUpperCase();
+            
+            // --- 應用階段 ---
+            // 優先使用為此建案學習到的專屬規則
+            if (buildingName && projectParsingRules[buildingName]) {
+                const customParser = projectParsingRules[buildingName];
+                const result = customParser(upperText);
+                if (result) {
+                    return result; // 套用專屬規則成功，回傳結果
+                }
+            }
+
+            // --- 後備通用邏輯 (Fallback) ---
+            // 如果沒有專屬規則，或規則不適用於此特例，則執行通用判斷
+            const floorNum = (floor && (String(floor).match(/\d+/) || [])[0]) || null;
+            const cleanedText = upperText.replace(/[\d]+F/g, '').replace(/[棟號樓\-\/]/g, ' ').trim();
+            const candidates = cleanedText.split(/\s+/).filter(p => /[A-Z0-9]/.test(p));
+
+            if (candidates.length === 0) return '';
+            
+            const letterPart = candidates.find(c => /^[A-Z]+$/.test(c));
+            const numPart = candidates.find(c => /^\d+$/.test(c));
+            if (letterPart && numPart) {
+                 const combined = letterPart + numPart;
+                 const combinedRegex = new RegExp(letterPart + "[\\s\\-]*" + numPart);
+                 if(combinedRegex.test(cleanedText)){
+                    return combined;
+                 }
+            }
+
+            if (candidates.length === 1) return candidates[0];
+
+            let bestCandidate = '';
+            let maxScore = -1;
+
+            candidates.forEach(candidate => {
+                let score = 0;
+                if (/[A-Z]/.test(candidate) && /\d/.test(candidate)) { score += 10; }
+                else if (/^[A-Z]+$/.test(candidate)) { score += 5; }
+                else if (/^\d+$/.test(candidate)) {
+                    if (floorNum && candidate === floorNum) { score -= 20; } 
+                    else { score += 1; }
+                }
+                if (/^[A-Z]/.test(candidate)) { score += 2; }
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestCandidate = candidate;
+                }
+            });
+            
+            const lastCandidate = candidates[candidates.length - 1];
+            if (/[A-Z]/.test(lastCandidate) && /\d/.test(lastCandidate)) {
+                return lastCandidate;
+            }
+
+            return bestCandidate;
+        }
+
+
         const safeParseFloat = (val) => {
             if (val === null || val === undefined || val === '') return 0;
             const num = parseFloat(String(val).replace(/,/g, ''));
@@ -394,10 +570,38 @@
 
         function findColumnName(headerList, keywords) {
             for (const keyword of keywords) {
-                const foundHeader = headerList.find(h => h.trim().toLowerCase().includes(keyword.toLowerCase()));
+                const foundHeader = headerList.find(h => h && h.trim().toLowerCase().includes(keyword.toLowerCase()));
                 if (foundHeader) return foundHeader.trim();
             }
             return null;
+        }
+        
+        function alphanumericSort(a, b) {
+            const reA = /[^a-zA-Z]/g;
+            const reN = /[^0-9]/g;
+            const aA = a.replace(reA, "");
+            const bA = b.replace(reA, "");
+            if (aA === bA) {
+                const aN = parseInt(a.replace(reN, ""), 10);
+                const bN = parseInt(b.replace(reN, ""), 10);
+                return aN === bN ? 0 : aN > bN ? 1 : -1;
+            } else {
+                return aA > bA ? 1 : -1;
+            }
+        }
+
+        function normalizeFloor(floorStr) {
+            if (!floorStr || typeof floorStr !== 'string') return -Infinity;
+            const chineseNumMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+            let str = floorStr.trim().replace(/樓|F/i, '');
+            let num = 0;
+            if (str.startsWith('二十')) { num = 20 + (chineseNumMap[str[2]] || 0); }
+            else if (str.startsWith('三十')) { num = 30 + (chineseNumMap[str[2]] || 0); }
+            else if (str.startsWith('十')) { num = 10 + (chineseNumMap[str[1]] || 0); } 
+            else if (str.includes('十')) { const parts = str.split('十'); num = (chineseNumMap[parts[0]] || 1) * 10 + (chineseNumMap[parts[1]] || 0); } 
+            else if (chineseNumMap[str]) { num = chineseNumMap[str]; }
+            else { num = parseInt(str, 10); }
+            return isNaN(num) ? -Infinity : num;
         }
 
         function calculateQuartiles(arr) {
@@ -437,10 +641,70 @@
             Papa.parse(file, config);
         };
         
+        // ★ 新增：推斷建案命名規則的函式
+        function deduceProjectPattern(projectRows) {
+            const unitIdCol = columnNames.unitId;
+            if (!unitIdCol) return null;
+
+            const templates = [
+                { name: '棟-號', regex: /^([A-Z])棟(\d+)號$/, parser: m => m[1] + m[2], score: 0 },
+                { name: 'A-1', regex: /^([A-Z])-(\d+)$/, parser: m => m[1] + m[2], score: 0 },
+                { name: 'A1戶', regex: /^([A-Z]+\d+)/, parser: m => m[1], score: 0 }
+            ];
+
+            const sample = projectRows.map(r => r[unitIdCol]).filter(Boolean).slice(0, 50);
+            if (sample.length < 5) return null; // 樣本太少，不進行推斷
+
+            sample.forEach(unitStr => {
+                const upperText = unitStr.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).toUpperCase();
+                for (const t of templates) {
+                    if (t.regex.test(upperText)) {
+                        t.score++;
+                    }
+                }
+            });
+
+            templates.sort((a, b) => b.score - a.score);
+            const bestPattern = templates[0];
+            
+            // 設定一個門檻，避免偶然匹配導致錯誤推斷
+            if (bestPattern.score > sample.length * 0.3 && bestPattern.score >= 3) {
+                console.log(`為建案推斷出解析規則: ${bestPattern.name}`);
+                return (text) => {
+                    const match = text.match(bestPattern.regex);
+                    return match ? bestPattern.parser(match) : null;
+                };
+            }
+            return null;
+        }
+
+        // ★ 新增：預運算所有建案的解析規則
+        function precomputeParsingRules(data) {
+            projectParsingRules = {}; // 重置規則
+            const projectCol = columnNames.buildingName;
+            if (!projectCol) return;
+
+            const dataByProject = data.reduce((acc, row) => {
+                const name = row[projectCol];
+                if (name) {
+                    if (!acc[name]) acc[name] = [];
+                    acc[name].push(row);
+                }
+                return acc;
+            }, {});
+
+            for (const name in dataByProject) {
+                const pattern = deduceProjectPattern(dataByProject[name]);
+                if (pattern) {
+                    projectParsingRules[name] = pattern;
+                }
+            }
+        }
+        
         const fileInputHandler = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            showLoader(true);
+            showLoader(true, "正在讀取與分析檔案...");
             const config = {
                 header: true,
                 skipEmptyLines: true,
@@ -453,25 +717,19 @@
                     headers = results.meta.fields;
                     
                     const columnMapping = {
-                        district: ['行政區', '鄉鎮市區'],
-                        buildingType: ['建物型態'],
-                        date: ['交易年月', '交易年月日'],
-                        buildingName: ['建案名稱'],
-                        totalPrice: ['產權總價(萬)', '產權總價', '總價'],
-                        area: ['房屋坪數(坪)', '房屋坪數', '坪數'],
-                        housePrice: ['房屋總價(萬)', '房屋總價'],
-                        room: ['房', '房間數'],
-                        bathroom: ['衛', '衛浴數'],
-                        parkingPrice: ['車位總價(萬)', '車位總價'],
-                        parkingCount: ['車位數'],
-                        parkingType: ['車位類型'],
-                        floor: ['樓層']
+                        district: ['行政區', '鄉鎮市區'], buildingType: ['建物型態'],
+                        date: ['交易年月', '交易年月日'], buildingName: ['建案名稱'],
+                        totalPrice: ['產權總價'], area: ['房屋坪數'],
+                        housePrice: ['房屋總價'], room: ['房'], bathroom: ['衛'],
+                        parkingPrice: ['車位總價'], parkingCount: ['車位數'],
+                        parkingType: ['車位類型'], floor: ['樓層'],
+                        unitId: ['戶別', '地址', '土地位置建物門牌'] 
                     };
 
                     let missingCols = [];
                     for (const key in columnMapping) {
                         columnNames[key] = findColumnName(headers, columnMapping[key]);
-                        if (!columnNames[key] && !['buildingName', 'housePrice', 'parkingPrice', 'parkingCount', 'parkingType', 'floor'].includes(key)) {
+                        if (!columnNames[key] && ['district', 'buildingType', 'date', 'totalPrice', 'area', 'room', 'buildingName', 'floor', 'unitId'].includes(key)) {
                             missingCols.push(`'${columnMapping[key][0]}'`);
                         }
                     }
@@ -479,12 +737,20 @@
                     if(missingCols.length > 0) {
                         showAlert(`警告：在您的CSV檔案中找不到以下必要的欄位：${missingCols.join(', ')}。部分分析功能可能無法使用。`);
                     }
+                    
+                    // --- 學習階段 ---
+                    // 在此預先運算，學習每個建案的專屬命名規則
+                    showLoader(true, "正在學習戶別命名規則...");
+                    setTimeout(() => {
+                        precomputeParsingRules(fullData);
+                        
+                        enableFilters(true);
+                        populateFilters(fullData);
+                        applyFilters();
+                        anomalyFilterSection.classList.remove('hidden');
+                        showLoader(false);
+                    }, 50);
 
-                    enableFilters(true);
-                    populateFilters(fullData);
-                    applyFilters();
-                    anomalyFilterSection.classList.remove('hidden');
-                    showLoader(false);
                 },
                 error: (err) => { showAlert("檔案解析失敗，請確認檔案格式是否為標準CSV。"); showLoader(false); }
             };
@@ -492,7 +758,7 @@
         };
         
         function enableFilters(enabled) {
-            [districtFilter, buildingTypeButton, buildingNameSearch, searchModeToggle, startDateInput, endDateInput, generateReportBtn].forEach(el => el.disabled = !enabled);
+            [districtFilter, buildingTypeButton, buildingNameSearch, searchModeToggle, priceGridToggle, startDateInput, endDateInput, generateReportBtn].forEach(el => el.disabled = !enabled);
         }
 
         function populateFilters(data) {
@@ -541,22 +807,61 @@
         
         // --- Rendering & Pagination ---
         function renderTable(dataToRender, page = 1) {
-            tableHeader.innerHTML = headers.map(h => `<th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">${h}</th>`).join('');
+            const displayHeaders = {
+                [columnNames.totalPrice]: '產權總價(萬)', [columnNames.housePrice]: '房屋總價(萬)',
+                [columnNames.parkingPrice]: '車位總價(萬)', [columnNames.area]: '房屋坪數(坪)',
+                [columnNames.room]: '房', [columnNames.bathroom]: '衛', [columnNames.parkingCount]: '車位數'
+            };
+        
+            const leftAlignHeaders = [columnNames.buildingName, columnNames.buildingType, columnNames.unitId];
+            const integerHeaders = [columnNames.totalPrice, columnNames.housePrice, columnNames.parkingPrice, columnNames.room, columnNames.bathroom, columnNames.parkingCount];
+        
+            let headerCells = [];
+            headers.forEach(h => {
+                const alignClass = leftAlignHeaders.includes(h) ? 'text-left' : '';
+                let title = displayHeaders[h] || h;
+                
+                if (h === columnNames.unitId) { title = '戶別原始碼'; }
+                
+                headerCells.push(`<th class="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider ${alignClass}">${title}</th>`);
+
+                if (h === columnNames.unitId) {
+                    const newHeaderCell = `<th class="px-4 py-3 text-xs font-bold text-purple-700 bg-purple-50 uppercase tracking-wider">戶別</th>`;
+                    headerCells.push(newHeaderCell);
+                }
+            });
+
+            tableHeader.innerHTML = `<tr>${headerCells.join('')}</tr>`;
             
             const startIndex = (page - 1) * ROWS_PER_PAGE;
-            const endIndex = startIndex + ROWS_PER_PAGE;
-            const paginatedData = dataToRender.slice(startIndex, endIndex);
-
+            const paginatedData = dataToRender.slice(startIndex, startIndex + ROWS_PER_PAGE);
+            
+            const colspan = headerCells.length;
+        
             let content = '';
             if (fullData.length > 0 && dataToRender.length === 0) {
-                 content = `<tr><td colspan="${headers.length || 10}" class="text-center p-8 text-gray-500">沒有符合條件的資料。</td></tr>`;
+                 content = `<tr><td colspan="${colspan}" class="text-center p-8 text-gray-500">沒有符合條件的資料。</td></tr>`;
             } else if (fullData.length === 0){
-                 content = `<tr><td colspan="10" class="text-center p-8 text-gray-500">請先載入並篩選資料。</td></tr>`;
+                 content = `<tr><td colspan="${colspan || 10}" class="text-center p-8 text-gray-500">請先載入並篩選資料。</td></tr>`;
             } else {
-                content = paginatedData.map(row => `
-                    <tr class="hover:bg-gray-50 transition-colors duration-150">
-                        ${headers.map(h => `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${row[h] || ''}</td>`).join('')}
-                    </tr>`).join('');
+                content = paginatedData.map(row => {
+                    let rowCells = [];
+                     headers.forEach(h => {
+                        const alignClass = leftAlignHeaders.includes(h) ? 'text-left' : '';
+                        let cellValue = row[h] || '';
+                        if (integerHeaders.includes(h)) {
+                            cellValue = formatNumber(safeParseFloat(cellValue));
+                        }
+                        rowCells.push(`<td class="px-4 py-3 text-sm text-gray-700 ${alignClass}">${cellValue}</td>`);
+                        
+                        if (h === columnNames.unitId) {
+                            const unitIdValue = getUnitIdentifier(row[columnNames.unitId], row[columnNames.buildingName], row[columnNames.floor]);
+                            const newCell = `<td class="px-4 py-3 text-sm text-purple-700 font-semibold bg-purple-50">${unitIdValue}</td>`;
+                            rowCells.push(newCell);
+                        }
+                    });
+                    return `<tr class="hover:bg-gray-50 transition-colors duration-150">${rowCells.join('')}</tr>`;
+                }).join('');
             }
             tableBody.innerHTML = content;
             resultsSummary.textContent = fullData.length > 0 ? `共找到 ${dataToRender.length} 筆資料` : '';
@@ -623,7 +928,7 @@
         }
 
         // --- Anomaly Detection and Rendering ---
-        function getAnomalyReasons(row, projectAvgUnitPrices) {
+        function getAnomalyReasons(row, projectAvgUnitPrices, rowHash) {
             let reasons = [];
             // Rule 1: Has parking price but no parking count
             if (columnNames.parkingPrice && columnNames.parkingCount && safeParseFloat(row[columnNames.parkingPrice]) > 0 && safeParseInt(row[columnNames.parkingCount]) === 0) {
@@ -640,12 +945,16 @@
                 const name = row[columnNames.buildingName];
                 if ((floor.includes('一') || floor === '1') && name && projectAvgUnitPrices[name] > 0) {
                     const area = safeParseFloat(row[columnNames.area]);
-                    if (area > 0) {
+                    if (area > 0 && housePrice > 0) {
                         if ((housePrice / area) > projectAvgUnitPrices[name] * 1.5) {
                             reasons.push('疑似店面');
                         }
                     }
                 }
+            }
+             // Rule 4: Duplicate data
+            if (duplicateHashes.get(rowHash) > 1) {
+                reasons.push('重複的資料');
             }
             return reasons;
         }
@@ -656,6 +965,15 @@
                 anomalyResultsSection.classList.add('hidden');
                 return;
             }
+
+            // Calculate duplicate hashes first
+            duplicateHashes.clear();
+            data.forEach(row => {
+                const rowCopy = {...row};
+                delete rowCopy['$$index_from_parser'];
+                const hash = JSON.stringify(Object.values(rowCopy));
+                duplicateHashes.set(hash, (duplicateHashes.get(hash) || 0) + 1);
+            });
 
             let projectAvgUnitPrices = {};
             if (columnNames.buildingName && columnNames.area) {
@@ -673,15 +991,42 @@
                 }
             }
 
-            let counts = { '有車位價無車位數': 0, '僅售車位': 0, '疑似店面': 0 };
+            let counts = { '有車位價無車位數': 0, '僅售車位': 0, '疑似店面': 0, '重複的資料': 0 };
+            const processedIndices = new Set();
+            const uniqueDuplicateHashes = new Set();
+
             data.forEach(row => {
-                const reasons = getAnomalyReasons(row, projectAvgUnitPrices);
+                if (processedIndices.has(row['$$index_from_parser'])) return;
+
+                const rowCopy = {...row};
+                delete rowCopy['$$index_from_parser'];
+                const rowHash = JSON.stringify(Object.values(rowCopy));
+                const reasons = getAnomalyReasons(row, projectAvgUnitPrices, rowHash);
+
                 if (reasons.length > 0) {
-                    reasons.forEach(r => counts[r]++);
-                    anomalousData.push({ ...row, anomalyReason: reasons.join(', ') });
+                     if (reasons.includes('重複的資料')) {
+                        if (!uniqueDuplicateHashes.has(rowHash)) {
+                           counts['重複的資料'] += duplicateHashes.get(rowHash);
+                           uniqueDuplicateHashes.add(rowHash);
+                        }
+                        const duplicateRows = data.filter(d => {
+                           const dCopy = {...d};
+                           delete dCopy['$$index_from_parser'];
+                           return JSON.stringify(Object.values(dCopy)) === rowHash;
+                        });
+                        duplicateRows.forEach(dupRow => {
+                           const dupReasons = getAnomalyReasons(dupRow, projectAvgUnitPrices, rowHash);
+                           anomalousData.push({ ...dupRow, anomalyReason: dupReasons.join(', ') });
+                           processedIndices.add(dupRow['$$index_from_parser']);
+                        });
+                     } else {
+                        anomalousData.push({ ...row, anomalyReason: reasons.join(', ') });
+                        processedIndices.add(row['$$index_from_parser']);
+                        reasons.forEach(r => counts[r]++);
+                     }
                 }
             });
-
+            
             // Update UI with counts
             document.querySelectorAll('[id^=anomaly][id$=Label]').forEach(label => {
                 const existingCount = label.querySelector('.anomaly-count');
@@ -690,6 +1035,7 @@
             if(counts['有車位價無車位數'] > 0) anomaly1Label.innerHTML += `<span class="anomaly-count">${counts['有車位價無車位數']}</span>`;
             if(counts['僅售車位'] > 0) anomaly2Label.innerHTML += `<span class="anomaly-count">${counts['僅售車位']}</span>`;
             if(counts['疑似店面'] > 0) anomaly3Label.innerHTML += `<span class="anomaly-count">${counts['疑似店面']}</span>`;
+            if(counts['重複的資料'] > 0) anomaly4Label.innerHTML += `<span class="anomaly-count">${counts['重複的資料']}</span>`;
 
             if (anomalousData.length > 0) {
                 anomalyResultsSection.classList.remove('hidden');
@@ -701,17 +1047,52 @@
         }
 
         function renderAnomalyTable(data, page) {
-            const anomalyHeaders = [...headers, '異常原因'];
-            anomalyTableHeader.innerHTML = anomalyHeaders.map(h => `<th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">${h}</th>`).join('');
-            
+            const displayHeaders = {
+                [columnNames.totalPrice]: '產權總價(萬)',[columnNames.housePrice]: '房屋總價(萬)',
+                [columnNames.parkingPrice]: '車位總價(萬)',[columnNames.area]: '房屋坪數(坪)',
+                [columnNames.room]: '房',[columnNames.bathroom]: '衛',[columnNames.parkingCount]: '車位數'
+            };
+
+            const leftAlignHeaders = [columnNames.buildingName, columnNames.buildingType, columnNames.unitId, '異常原因'];
+
+            let headerCells = [];
+            headers.forEach(h => {
+                const alignClass = leftAlignHeaders.includes(h) ? 'text-left' : '';
+                let title = displayHeaders[h] || h;
+                if (h === columnNames.unitId) {
+                    title = '戶別原始碼';
+                }
+                headerCells.push(`<th class="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider ${alignClass}">${title}</th>`);
+                if (h === columnNames.unitId) {
+                    headerCells.push(`<th class="px-4 py-3 text-xs font-bold text-purple-700 bg-purple-50 uppercase tracking-wider">戶別</th>`);
+                }
+            });
+            headerCells.push(`<th class="px-4 py-3 text-xs font-bold text-red-600 uppercase tracking-wider text-left">異常原因</th>`);
+            anomalyTableHeader.innerHTML = `<tr>${headerCells.join('')}</tr>`;
+
             const startIndex = (page - 1) * ROWS_PER_PAGE;
             const paginatedData = data.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
-            anomalyTableBody.innerHTML = paginatedData.map(row => `
-                <tr class="hover:bg-gray-50 transition-colors duration-150">
-                    ${headers.map(h => `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${row[h] || ''}</td>`).join('')}
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-red-600 font-semibold">${row.anomalyReason || ''}</td>
-                </tr>`).join('');
+            anomalyTableBody.innerHTML = paginatedData.map(row => {
+                 let rowCells = [];
+                 headers.forEach(h => {
+                    const alignClass = leftAlignHeaders.includes(h) ? 'text-left' : '';
+                    let cellValue = row[h] || '';
+                     if ([columnNames.totalPrice, columnNames.housePrice, columnNames.parkingPrice, columnNames.room, columnNames.bathroom, columnNames.parkingCount].includes(h)) {
+                        cellValue = formatNumber(safeParseFloat(cellValue));
+                    }
+                    rowCells.push(`<td class="px-4 py-3 text-sm text-gray-700 ${alignClass}">${cellValue}</td>`);
+                    
+                    if (h === columnNames.unitId) {
+                        const unitIdValue = getUnitIdentifier(row[columnNames.unitId], row[columnNames.buildingName], row[columnNames.floor]);
+                        rowCells.push(`<td class="px-4 py-3 text-sm text-purple-700 font-semibold bg-purple-50">${unitIdValue}</td>`);
+                    }
+                });
+                
+                rowCells.push(`<td class="px-4 py-3 text-sm text-red-600 font-semibold text-left">${row.anomalyReason || ''}</td>`);
+                
+                return `<tr class="hover:bg-gray-50 transition-colors duration-150">${rowCells.join('')}</tr>`;
+            }).join('');
             
             anomalySummary.textContent = `共偵測到 ${data.length} 筆異常資料`;
             renderPaginationControls(data.length, page, 'anomaly');
@@ -719,11 +1100,11 @@
         
         // --- Analysis Logic ---
         function filterByAnomalies(data, exclusions) {
-            if (!exclusions.exclude1 && !exclusions.exclude2 && !exclusions.exclude3) {
+            if (Object.values(exclusions).every(v => !v)) {
                 return data;
             }
             
-            let projectAvgUnitPrices = {}; // Re-calculate for the specific dataset if needed
+            let projectAvgUnitPrices = {};
             if (exclusions.exclude3 && columnNames.buildingName && columnNames.area) {
                  const projects = data.reduce((acc, row) => {
                     const name = row[columnNames.buildingName];
@@ -731,7 +1112,7 @@
                     if (!acc[name]) acc[name] = { unitPrices: [] };
                     const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
                     const area = safeParseFloat(row[columnNames.area]);
-                    if (area > 0) acc[name].unitPrices.push(housePrice / area);
+                    if (area > 0 && housePrice > 0) acc[name].unitPrices.push(housePrice / area);
                     return acc;
                 }, {});
                 for (const name in projects) {
@@ -739,12 +1120,24 @@
                 }
             }
             
+            const seenHashes = new Set();
             return data.filter(row => {
-                const reasons = getAnomalyReasons(row, projectAvgUnitPrices);
-                if (reasons.length === 0) return true;
-                if (exclusions.exclude1 && reasons.includes('有車位價無車位數')) return false;
-                if (exclusions.exclude2 && reasons.includes('僅售車位')) return false;
-                if (exclusions.exclude3 && reasons.includes('疑似店面')) return false;
+                const rowCopy = {...row};
+                delete rowCopy['$$index_from_parser'];
+                const rowHash = JSON.stringify(Object.values(rowCopy));
+                const reasons = getAnomalyReasons(row, projectAvgUnitPrices, rowHash);
+
+                if (reasons.length > 0) {
+                    if (exclusions.exclude1 && reasons.includes('有車位價無車位數')) return false;
+                    if (exclusions.exclude2 && reasons.includes('僅售車位')) return false;
+                    if (exclusions.exclude3 && reasons.includes('疑似店面')) return false;
+                    if (exclusions.exclude4 && reasons.includes('重複的資料')) {
+                        if (seenHashes.has(rowHash)) {
+                            return false; // It's a subsequent duplicate, so remove it
+                        }
+                        seenHashes.add(rowHash); // It's the first time we see this duplicate, mark it and let it pass this filter
+                    }
+                }
                 return true;
             });
         }
@@ -760,7 +1153,8 @@
                 const exclusions = {
                     exclude1: document.getElementById('anomaly1').checked,
                     exclude2: document.getElementById('anomaly2').checked,
-                    exclude3: document.getElementById('anomaly3').checked
+                    exclude3: document.getElementById('anomaly3').checked,
+                    exclude4: document.getElementById('anomaly4').checked,
                 };
 
                 const generalAnalysisData = filterByAnomalies(filteredData, exclusions);
@@ -775,14 +1169,18 @@
                 }
                 
                 analysisSection.style.display = 'block';
+
+                renderPriceGridAnalysis(generalAnalysisData);
                 renderCoreMetrics(generalAnalysisData);
                 renderCaseRanking(generalAnalysisData, caseRankingSortKey);
                 renderHousePriceBandAnalysis(generalAnalysisData);
                 renderUnitPriceAnalysis(generalAnalysisData);
-                renderParkingPriceAnalysis(parkingAnalysisData); // Use special dataset here
+                renderParkingPriceAnalysis(parkingAnalysisData);
+                renderFloorAnalysis(generalAnalysisData);
                 renderAnnualSales(generalAnalysisData);
                 renderQuarterlySales(generalAnalysisData);
                 renderMonthlySales(generalAnalysisData);
+                renderWeeklySales(generalAnalysisData);
                 
                 updateVisibleTabs();
 
@@ -800,39 +1198,50 @@
                 const diffTime = Math.abs(endDate - startDate);
                 diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             }
+            
+            const isPriceGridToggleOn = priceGridToggle.checked;
+            const uniqueBuildingNames = new Set(filteredData.map(row => row[columnNames.buildingName]).filter(Boolean));
+            const isSingleProject = uniqueBuildingNames.size === 1;
 
             const tabs = {
-                'core-metrics': true,
-                'case-ranking': true,
-                'house-price-band': true,
-                'unit-price': true,
-                'parking-price': true,
-                'annual-sales': diffDays > 365,
-                'quarterly-sales': diffDays > 90,
-                'monthly-sales': diffDays <= 1095,
+                'price-grid': isPriceGridToggleOn && isSingleProject,
+                'core-metrics': true, 'case-ranking': true,
+                'house-price-band': true, 'unit-price': true,
+                'parking-price': true, 'floor-analysis': true,
+                'annual-sales': diffDays > 365, 'quarterly-sales': diffDays > 90,
+                'monthly-sales': diffDays > 28 && diffDays <= 1095,
+                'weekly-sales': diffDays <= 366,
             };
 
             let firstVisibleTab = null;
+            let preferredTab = null;
 
             for (const tabId in tabs) {
                 const button = document.querySelector(`[data-tab='${tabId}']`);
-                if (tabs[tabId]) {
-                    button.classList.add('visible');
-                    if (!firstVisibleTab) firstVisibleTab = tabId; // Set first visible tab
-                } else {
-                    button.classList.remove('visible', 'active');
-                    if(document.getElementById(`${tabId}-content`)) document.getElementById(`${tabId}-content`).classList.remove('active');
+                if (button) {
+                    if (tabs[tabId]) {
+                        button.classList.add('visible');
+                        if (!firstVisibleTab) firstVisibleTab = tabId;
+                    } else {
+                        button.classList.remove('visible', 'active');
+                         if(document.getElementById(`${tabId}-content`)) document.getElementById(`${tabId}-content`).classList.remove('active');
+                    }
                 }
             }
             
-             let preferredTab = 'core-metrics';
-             if (tabs['monthly-sales']) preferredTab = 'monthly-sales';
-             else if (tabs['quarterly-sales']) preferredTab = 'quarterly-sales';
-             else if (tabs['annual-sales']) preferredTab = 'annual-sales';
-             else if(tabs['parking-price']) preferredTab = 'parking-price';
-             else if (tabs['unit-price']) preferredTab = 'unit-price';
-             else if (tabs['house-price-band']) preferredTab = 'house-price-band';
-             else if (tabs['case-ranking']) preferredTab = 'case-ranking';
+            if (tabs['price-grid']) {
+                preferredTab = 'price-grid';
+            } else if (tabs['weekly-sales']) {
+                preferredTab = 'weekly-sales';
+            } else if (tabs['monthly-sales']) {
+                preferredTab = 'monthly-sales';
+            } else if (tabs['quarterly-sales']) {
+                preferredTab = 'quarterly-sales';
+            } else if (tabs['annual-sales']) {
+                preferredTab = 'annual-sales';
+            } else {
+                preferredTab = firstVisibleTab || 'core-metrics';
+            }
             
             switchTab(preferredTab);
         }
@@ -842,8 +1251,7 @@
             const missing = [];
             if (!columnNames.totalPrice) missing.push("'產權總價(萬)'");
             if (!columnNames.area) missing.push("'房屋坪數(坪)'");
-            if (!columnNames.housePrice && !columnNames.totalPrice) missing.push("'房屋總價(萬)' 或 '產權總價(萬)'");
-
+            
             if (missing.length > 0) {
                 container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少必要的欄位 (${missing.join(', ')})，無法計算核心指標。</p>`;
                 return;
@@ -852,7 +1260,7 @@
             const totalSales = data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.totalPrice]), 0);
             const totalArea = data.reduce((sum, row) => sum + safeParseFloat(row[columnNames.area]), 0);
             const totalHousePrice = data.reduce((sum, row) => {
-                const housePriceVal = columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice]));
+                const housePriceVal = columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice] || 0));
                 return sum + safeParseFloat(housePriceVal);
             }, 0);
             const avgPrice = totalArea > 0 ? totalHousePrice / totalArea : 0;
@@ -915,14 +1323,10 @@
             let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table">
                 <thead class="text-xs text-gray-700 uppercase bg-gray-100">
                     <tr>
-                        <th class="px-2 py-3 border">房間數</th>
-                        <th class="px-2 py-3 border">衛浴數</th>
-                        <th class="px-2 py-3 border">筆數</th>
-                        <th class="px-2 py-3 border">平均房屋總價</th>
-                        <th class="px-2 py-3 border">最低房屋總價</th>
-                        <th class="px-2 py-3 border">1/4分房屋總價</th>
-                        <th class="px-2 py-3 border">中位數房屋總價</th>
-                        <th class="px-2 py-3 border">3/4分房屋總價</th>
+                        <th class="px-2 py-3 border">房間數</th><th class="px-2 py-3 border">衛浴數</th>
+                        <th class="px-2 py-3 border">筆數</th><th class="px-2 py-3 border">平均房屋總價</th>
+                        <th class="px-2 py-3 border">最低房屋總價</th><th class="px-2 py-3 border">1/4分房屋總價</th>
+                        <th class="px-2 py-3 border">中位數房屋總價</th><th class="px-2 py-3 border">3/4分房屋總價</th>
                          <th class="px-2 py-3 border">最高房屋總價</th>
                     </tr>
                 </thead>
@@ -940,14 +1344,10 @@
                 if (group.prices.length === 0) return;
                 const stats = calculateQuartiles(group.prices);
                 tableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
-                    ${renderCell(group.rooms)}
-                    ${renderCell(group.baths)}
-                    ${renderCell(formatNumber(group.prices.length))}
-                    ${renderCell(formatNumber(stats.avg))}
-                    ${renderCell(formatNumber(stats.min))}
-                    ${renderCell(formatNumber(stats.q1))}
-                    ${renderCell(formatNumber(stats.median))}
-                    ${renderCell(formatNumber(stats.q3))}
+                    ${renderCell(group.rooms)}${renderCell(group.baths)}
+                    ${renderCell(formatNumber(group.prices.length))}${renderCell(formatNumber(stats.avg))}
+                    ${renderCell(formatNumber(stats.min))}${renderCell(formatNumber(stats.q1))}
+                    ${renderCell(formatNumber(stats.median))}${renderCell(formatNumber(stats.q3))}
                     ${renderCell(formatNumber(stats.max))}
                 </tr>`;
             });
@@ -1022,26 +1422,27 @@
             if (window.unitPriceChart instanceof Chart) {
                 window.unitPriceChart.destroy();
             }
-            const maxPriceVal = Math.ceil(stats.max / 5) * 5;
-            const labels = [];
-            for (let i = 0; i <= maxPriceVal; i += 5) { if(i+5 > stats.min) labels.push(`${i}-${i+5}`); }
-            const bucketData = new Array(labels.length).fill(0);
-            priceValues.forEach(p => {
-                const bucketIndex = Math.floor(p / 5);
-                const labelIndex = labels.findIndex(l => {
-                    const parts = l.split('-').map(Number);
-                    return p >= parts[0] && p < parts[1];
+            if(chartCtx) {
+                const maxPriceVal = Math.ceil(stats.max / 5) * 5;
+                const labels = [];
+                for (let i = 0; i <= maxPriceVal; i += 5) { if(i+5 > stats.min) labels.push(`${i}-${i+5}`); }
+                const bucketData = new Array(labels.length).fill(0);
+                priceValues.forEach(p => {
+                    const labelIndex = labels.findIndex(l => {
+                        const parts = l.split('-').map(Number);
+                        return p >= parts[0] && p < parts[1];
+                    });
+                    if (labelIndex !== -1) {
+                        bucketData[labelIndex]++;
+                    }
                 });
-                if (labelIndex !== -1) {
-                    bucketData[labelIndex]++;
-                }
-            });
 
-            window.unitPriceChart = new Chart(chartCtx, {
-                type: 'bar',
-                data: { labels: labels, datasets: [{ label: '交易筆數', data: bucketData, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }] },
-                options: { scales: { y: { beginAtZero: true, title: { display: true, text: '筆數' } }, x: { title: { display: true, text: '單價區間 (萬/坪)' } } }, plugins: { legend: { display: false } } }
-            });
+                window.unitPriceChart = new Chart(chartCtx, {
+                    type: 'bar',
+                    data: { labels: labels, datasets: [{ label: '交易筆數', data: bucketData, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }] },
+                    options: { scales: { y: { beginAtZero: true, title: { display: true, text: '筆數' } }, x: { title: { display: true, text: '單價區間 (萬/坪)' } } }, plugins: { legend: { display: false } } }
+                });
+            }
 
         }
 
@@ -1082,7 +1483,7 @@
             const parkingByType = data.reduce((acc, row) => {
                 const type = row[columnNames.parkingType] || '未知';
                 const pPrice = safeParseFloat(row[columnNames.parkingPrice]);
-                const pCount = safeParseInt(row[columnNames.parkingCount]) || 1; // Default to 1 if count is 0 but price exists
+                const pCount = safeParseInt(row[columnNames.parkingCount]) || 1; 
                 if(pPrice > 0){
                     if (!acc[type]) {
                         acc[type] = { totalValue: 0, totalCount: 0, transactionCount: 0 };
@@ -1113,10 +1514,74 @@
             tableHTML += `</div></div>`;
             container.innerHTML = tableHTML;
         }
+        
+        function renderFloorAnalysis(data) {
+            const container = document.getElementById('floor-analysis-content');
+            const required = ['buildingName', 'floor', 'totalPrice', 'area'];
+            const missing = required.filter(key => !columnNames[key]);
+            if (missing.length > 0) {
+                container.innerHTML = `<p class="text-red-500 text-center font-semibold">錯誤：缺少欄位 (${missing.join(', ')})，無法計算樓層價量分析。</p>`;
+                return;
+            }
+
+            const projects = data.reduce((acc, row) => {
+                const name = row[columnNames.buildingName];
+                if (!name) return acc;
+                if (!acc[name]) acc[name] = {};
+
+                const floorNum = normalizeFloor(row[columnNames.floor]);
+                if (floorNum === -Infinity) return acc;
+
+                if (!acc[name][floorNum]) {
+                    acc[name][floorNum] = { unitPrices: [], count: 0, priceSum: 0 };
+                }
+                const floorData = acc[name][floorNum];
+                const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[columnNames.totalPrice]) - safeParseFloat(row[columnNames.parkingPrice])));
+                const area = safeParseFloat(row[columnNames.area]);
+                if (area > 0 && housePrice > 0) floorData.unitPrices.push(housePrice / area);
+                floorData.count++;
+                floorData.priceSum += safeParseFloat(row[columnNames.totalPrice]);
+
+                return acc;
+            }, {});
+
+            let html = '';
+            const projectNames = Object.keys(projects).sort();
+
+            if (projectNames.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center">沒有可用於樓層分析的資料。</p>`;
+                return;
+            }
+
+            projectNames.forEach(name => {
+                html += `<h3 class="text-xl font-semibold mb-2 mt-6 text-gray-700">${name}</h3>`;
+                html += `<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th class="px-2 py-3 border">樓層</th><th class="px-2 py-3 border">交易筆數</th>
+                            <th class="px-2 py-3 border">平均單價(萬/坪)</th><th class="px-2 py-3 border">最低單價(萬/坪)</th>
+                            <th class="px-2 py-3 border">最高單價(萬/坪)</th><th class="px-2 py-3 border">總銷金額(萬)</th>
+                        </tr>
+                    </thead><tbody>`;
+                
+                const sortedFloors = Object.keys(projects[name]).map(Number).sort((a,b) => b-a);
+                sortedFloors.forEach(floor => {
+                     const d = projects[name][floor];
+                     const stats = calculateQuartiles(d.unitPrices);
+                     html += `<tr class="bg-white border-b hover:bg-gray-50">
+                        ${renderCell(`${floor}F`)}${renderCell(formatNumber(d.count))}
+                        ${renderCell(formatNumber(stats.avg, true))}${renderCell(formatNumber(stats.min, true))}
+                        ${renderCell(formatNumber(stats.max, true))}${renderCell(formatNumber(d.priceSum))}
+                     </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            });
+            container.innerHTML = html;
+        }
 
         const renderTimeBasedHeader = () => `
             <tr>
-                <th rowspan="2" class="px-2 py-3 border">期間</th>
+                <th rowspan="2" class="px-2 py-3 border align-middle">期間</th>
                 <th colspan="3" class="px-2 py-3 border text-center">2房去化</th>
                 <th colspan="3" class="px-2 py-3 border text-center">3房去化</th>
                 <th colspan="3" class="px-2 py-3 border text-center">總計</th>
@@ -1126,6 +1591,15 @@
                 <th class="px-2 py-3 border">資料筆數</th><th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">房屋坪數(坪)</th>
                 <th class="px-2 py-3 border">資料筆數</th><th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">房屋坪數(坪)</th>
             </tr>`;
+        
+        function getWeekKey(date) {
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+            return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+        }
 
         function renderTimeBasedSales(container, data, periodType) {
             const missing = ['date', 'room', 'totalPrice', 'area'].filter(key => !columnNames[key]);
@@ -1142,6 +1616,7 @@
                 if (periodType === 'annual') key = date.getFullYear() + '年';
                 else if (periodType === 'quarterly') key = `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
                 else if (periodType === 'monthly') key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                else if (periodType === 'weekly') key = getWeekKey(date);
                 
                 if (!periodData[key]) {
                     periodData[key] = { '2房': { count: 0, price: 0, area: 0 }, '3房': { count: 0, price: 0, area: 0 }, '總計': { count: 0, price: 0, area: 0 } };
@@ -1191,9 +1666,10 @@
         const renderAnnualSales = (data) => renderTimeBasedSales(document.getElementById('annual-sales-content'), data, 'annual');
         const renderQuarterlySales = (data) => renderTimeBasedSales(document.getElementById('quarterly-sales-content'), data, 'quarterly');
         const renderMonthlySales = (data) => renderTimeBasedSales(document.getElementById('monthly-sales-content'), data, 'monthly');
+        const renderWeeklySales = (data) => renderTimeBasedSales(document.getElementById('weekly-sales-content'), data, 'weekly');
         
         function renderCaseRanking(data, sortKey = 'avgUnitPrice') {
-            caseRankingSortKey = sortKey; // Update global state
+            caseRankingSortKey = sortKey;
             const container = document.getElementById('case-ranking-content');
             const required = ['buildingName', 'area', 'totalPrice'];
             const missing = required.filter(key => !columnNames[key]);
@@ -1238,10 +1714,8 @@
                 const parkingPriceStats = calculateQuartiles(p.parkingPrices);
                 return {
                     ...p,
-                    avgUnitPrice: unitPriceStats.avg,
-                    minUnitPrice: unitPriceStats.min,
-                    maxUnitPrice: unitPriceStats.max,
-                    medianUnitPrice: unitPriceStats.median,
+                    avgUnitPrice: unitPriceStats.avg, minUnitPrice: unitPriceStats.min,
+                    maxUnitPrice: unitPriceStats.max, medianUnitPrice: unitPriceStats.median,
                     avgParkingPrice: parkingPriceStats.avg,
                     marketShare: overallTotalPrice > 0 ? (p.priceSum / overallTotalPrice) * 100 : 0,
                 };
@@ -1263,16 +1737,11 @@
              let tableHTML = `${sortButtons}<div class="overflow-x-auto"><table class="w-full text-sm text-gray-500 analysis-table">
                 <thead class="text-xs text-gray-700 uppercase bg-gray-100">
                     <tr>
-                        <th class="px-2 py-3 border">排名</th>
-                        <th class="px-2 py-3 border text-left">建案名稱</th>
-                        <th class="px-2 py-3 border">房屋坪數(坪)</th>
-                        <th class="px-2 py-3 border">資料筆數</th>
-                        <th class="px-2 py-3 border">產權總價(萬)</th>
-                        <th class="px-2 py-3 border">市場佔比(%)</th>
-                        <th class="px-2 py-3 border">平均單價(萬)</th>
-                        <th class="px-2 py-3 border">最低單價(萬)</th>
-                        <th class="px-2 py-3 border">最高單價(萬)</th>
-                        <th class="px-2 py-3 border">單價中位數(萬)</th>
+                        <th class="px-2 py-3 border">排名</th><th class="px-2 py-3 border text-left">建案名稱</th>
+                        <th class="px-2 py-3 border">房屋坪數(坪)</th><th class="px-2 py-3 border">資料筆數</th>
+                        <th class="px-2 py-3 border">產權總價(萬)</th><th class="px-2 py-3 border">市場佔比(%)</th>
+                        <th class="px-2 py-3 border">平均單價(萬)</th><th class="px-2 py-3 border">最低單價(萬)</th>
+                        <th class="px-2 py-3 border">最高單價(萬)</th><th class="px-2 py-3 border">單價中位數(萬)</th>
                         <th class="px-2 py-3 border">車位平均單價</th>
                     </tr>
                 </thead>
@@ -1280,16 +1749,11 @@
             
             rankedProjects.forEach((p, index) => {
                 tableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
-                    ${renderCell(index + 1)}
-                    <td class="border px-2 py-2 text-left">${p.name}</td>
-                    ${renderCell(formatNumber(p.areaSum, true))}
-                    ${renderCell(formatNumber(p.count))}
-                    ${renderCell(formatNumber(p.priceSum))}
-                    ${renderCell(formatNumber(p.marketShare, true))}
-                    ${renderCell(formatNumber(p.avgUnitPrice, true))}
-                    ${renderCell(formatNumber(p.minUnitPrice, true))}
-                    ${renderCell(formatNumber(p.maxUnitPrice, true))}
-                    ${renderCell(formatNumber(p.medianUnitPrice, true))}
+                    ${renderCell(index + 1)}<td class="border px-2 py-2 text-left">${p.name}</td>
+                    ${renderCell(formatNumber(p.areaSum, true))}${renderCell(formatNumber(p.count))}
+                    ${renderCell(formatNumber(p.priceSum))}${renderCell(formatNumber(p.marketShare, true))}
+                    ${renderCell(formatNumber(p.avgUnitPrice, true))}${renderCell(formatNumber(p.minUnitPrice, true))}
+                    ${renderCell(formatNumber(p.maxUnitPrice, true))}${renderCell(formatNumber(p.medianUnitPrice, true))}
                     ${renderCell(formatNumber(p.avgParkingPrice))}
                 </tr>`;
             });
@@ -1297,20 +1761,93 @@
             tableHTML += `</tbody><tfoot class="bg-gray-100 font-bold">
                 <tr>
                     <td class="border px-2 py-2 text-center" colspan="2">總計 (所有篩選資料)</td>
-                    ${renderCell(formatNumber(grandTotal.areaSum, true))}
-                    ${renderCell(formatNumber(grandTotal.count))}
+                    ${renderCell(formatNumber(grandTotal.areaSum, true))} ${renderCell(formatNumber(grandTotal.count))}
                     ${renderCell(formatNumber(grandTotal.priceSum))}
                     <td class="border px-2 py-2 text-center" colspan="6">-</td>
                 </tr>
             </tfoot></table></div>`;
             container.innerHTML = tableHTML;
 
-            // Add event listeners to new sort buttons
             container.querySelectorAll('.sort-button').forEach(button => {
                 button.addEventListener('click', (e) => {
                     renderCaseRanking(data, e.target.dataset.sortKey);
                 });
             });
+        }
+        
+        function renderPriceGridAnalysis(data) {
+            const container = document.getElementById('price-grid-content');
+            const required = ['buildingName', 'floor', 'unitId', 'area'];
+            const priceCol = columnNames.housePrice || columnNames.totalPrice;
+            if (!priceCol) required.push('housePrice/totalPrice');
+
+            const missing = required.filter(key => !columnNames[key]);
+            if (missing.length > 0) {
+                 container.innerHTML = `<p class="text-gray-500 text-center font-semibold">此分析需要特定欄位，請檢查CSV檔案是否包含: ${missing.join(', ')}</p>`;
+                return;
+            }
+
+            const gridData = {};
+            const unitIds = new Set();
+            const floors = new Set();
+            const buildingName = data.length > 0 ? data[0][columnNames.buildingName] : '';
+
+            data.forEach(row => {
+                const floorStr = row[columnNames.floor];
+                const floorNum = normalizeFloor(floorStr);
+                const unitId = getUnitIdentifier(row[columnNames.unitId], buildingName, floorStr);
+
+                if (!unitId || floorNum === -Infinity) return;
+                
+                const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[priceCol]) - safeParseFloat(row[columnNames.parkingPrice])));
+                const area = safeParseFloat(row[columnNames.area]);
+
+                if (area > 0 && housePrice > 0) {
+                    const unitPrice = housePrice / area;
+                    unitIds.add(unitId);
+                    floors.add(floorNum);
+                    
+                    if (!gridData[floorNum]) gridData[floorNum] = {};
+                    if (!gridData[floorNum][unitId]) gridData[floorNum][unitId] = [];
+                    gridData[floorNum][unitId].push(unitPrice);
+                }
+            });
+
+            if (unitIds.size === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center">在此建案中找不到可分析的戶別資料。請檢查「戶別」欄位是否清晰或嘗試調整解析規則。</p>`;
+                return;
+            }
+
+            const sortedUnitIds = [...unitIds].sort(alphanumericSort);
+            const sortedFloors = [...floors].sort((a, b) => b - a); // 由高到低
+
+            let tableHTML = `<h3 class="text-xl font-semibold mb-4 text-gray-800">建案：${buildingName}</h3>`;
+            tableHTML += `<div class="overflow-x-auto border rounded-lg"><table class="w-full text-sm text-gray-500 analysis-table">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-2 py-3 border bg-gray-200">樓層 \\ 戶別</th>`;
+            sortedUnitIds.forEach(id => {
+                tableHTML += `<th class="px-2 py-3 border">${id}</th>`;
+            });
+            tableHTML += `</tr></thead><tbody>`;
+
+            sortedFloors.forEach(floor => {
+                tableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
+                    <th class="px-2 py-3 border font-bold bg-gray-50">${floor}F</th>`;
+                sortedUnitIds.forEach(id => {
+                    const prices = gridData[floor] ? gridData[floor][id] : null;
+                    let cellContent = '-';
+                    if (prices && prices.length > 0) {
+                        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+                        cellContent = formatNumber(avgPrice, true);
+                    }
+                    tableHTML += renderCell(cellContent);
+                });
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `</tbody></table></div>`;
+            container.innerHTML = tableHTML;
         }
 
 
@@ -1320,14 +1857,15 @@
             if(document.getElementById(`${tabId}-content`)) {
                 document.getElementById(`${tabId}-content`).classList.add('active');
             }
-            if(document.querySelector(`[data-tab='${tabId}']`)) {
-                document.querySelector(`[data-tab='${tabId}']`).classList.add('active');
+            const button = document.querySelector(`[data-tab='${tabId}']`);
+            if(button) {
+                button.classList.add('active');
             }
         }
         
         // --- Event Listeners ---
         csvFileInput.addEventListener('change', fileInputHandler);
-        [districtFilter, startDateInput, endDateInput].forEach(el => {
+        [districtFilter, startDateInput, endDateInput, priceGridToggle].forEach(el => {
             el.addEventListener('change', applyFilters);
         });
         buildingNameSearch.addEventListener('input', applyFilters);
@@ -1356,6 +1894,9 @@
         window.addEventListener('click', (e) => {
             if (!buildingTypeContainer.contains(e.target)) buildingTypeMenu.style.display = 'none';
             if (e.target == customAlert) hideAlert();
+            if (e.target == exportChoiceModal) exportChoiceModal.classList.remove('flex');
+            if (e.target == sectionSelectModal) hideSectionSelectModal();
+
             if (e.target.classList.contains('page-btn')) {
                 const type = e.target.dataset.type;
                 const dir = e.target.dataset.dir;
@@ -1368,15 +1909,52 @@
                 }
             }
         });
+        
+        // --- Export Logic ---
+        mainExportBtn.addEventListener('click', () => {
+            if (analysisSection.style.display === 'none') {
+                showAlert('沒有可匯出的報告，請先產生分析報告。');
+                return;
+            }
+            exportChoiceModal.classList.add('flex');
+        });
+        exportChoiceModalClose.onclick = () => exportChoiceModal.classList.remove('flex');
+        exportPdfChoiceBtn.onclick = () => {
+            exportChoiceModal.classList.remove('flex');
+            showSectionSelectModal('pdf');
+        };
+        exportClipboardChoiceBtn.onclick = () => {
+            exportChoiceModal.classList.remove('flex');
+            showSectionSelectModal('clipboard');
+        }
 
-        async function exportReportToPDF() {
+        confirmExportBtn.addEventListener('click', () => {
+             const selectedTabs = Array.from(document.querySelectorAll('.export-section-checkbox:checked'))
+                                    .map(cb => cb.dataset.tabId);
+             hideSectionSelectModal();
+             if (currentExportFormat === 'pdf') {
+                exportReportToPDF(selectedTabs);
+             } else {
+                copyReportToClipboard(selectedTabs);
+             }
+        });
+
+        sectionSelectAllBtn.addEventListener('click', () => {
+            const allCheckboxes = document.querySelectorAll('.export-section-checkbox');
+            const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+            allCheckboxes.forEach(cb => cb.checked = !allChecked);
+        });
+
+        async function exportReportToPDF(selectedTabs) {
+            if(selectedTabs.length === 0) {
+                showAlert('請至少選擇一個要匯出的報告區塊。');
+                return;
+            }
+
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             
             try {
-                // Attempt to add a CJK-supporting font.
-                // Note: This loads the font from a CDN. In a real-world, production environment,
-                // you would host this font file yourself.
                 doc.addFont('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0-beta.2/fonts/SourceHanSans/SourceHanSans-Normal.ttf', 'SourceHanSans', 'normal');
                 doc.setFont('SourceHanSans');
             } catch (e) {
@@ -1386,12 +1964,16 @@
             
             showLoader(true, '正在產生 PDF...');
 
-            const tabOrder = ['core-metrics', 'case-ranking', 'house-price-band', 'unit-price', 'parking-price', 'annual-sales', 'quarterly-sales', 'monthly-sales'];
-            const visibleTabs = tabOrder.filter(tabId => document.querySelector(`[data-tab='${tabId}']`)?.classList.contains('visible'));
+            for (let i = 0; i < selectedTabs.length; i++) {
+                const tabId = selectedTabs[i];
+                const isPriceGrid = tabId === 'price-grid';
 
-            for (let i = 0; i < visibleTabs.length; i++) {
-                const tabId = visibleTabs[i];
-                if (i > 0) doc.addPage();
+                if (i > 0) {
+                    doc.addPage('a4', isPriceGrid ? 'landscape' : 'portrait');
+                } else if (isPriceGrid) {
+                    doc.setPage(1);
+                    doc.internal.pageSize.setPage('a4', 'landscape');
+                }
                 
                 const element = document.getElementById(`${tabId}-content`);
                 const title = document.querySelector(`[data-tab='${tabId}']`).textContent;
@@ -1409,10 +1991,10 @@
                          doc.text(header.textContent, 14, startY);
                          startY += 8;
                      }
+                     
+                     await new Promise(resolve => setTimeout(resolve, 0));
                      await doc.autoTable({ 
-                        html: table, 
-                        startY: startY, 
-                        theme: 'grid',
+                        html: table, startY: startY, theme: 'grid',
                         styles: { font: 'SourceHanSans', fontStyle: 'normal' },
                         headStyles: { fontStyle: 'bold' }
                     });
@@ -1439,7 +2021,7 @@
                 }
 
                 if(allTables.length === 0 && allCanvases.length === 0) {
-                     const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+                     const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
                     const imgData = canvas.toDataURL('image/png');
                     const imgProps = doc.getImageProperties(imgData);
                     const pdfWidth = doc.internal.pageSize.getWidth();
@@ -1457,7 +2039,81 @@
             showLoader(false);
         }
 
-        exportPdfBtn.addEventListener('click', exportReportToPDF);
+        async function copyReportToClipboard(selectedTabs) {
+            if (selectedTabs.length === 0) {
+                showAlert('請至少選擇一個要匯出的報告區塊。');
+                return;
+            }
+            showLoader(true, '正在準備報告內容...');
+            
+            let htmlString = '<html><head><meta charset="UTF-8"></head><body style="font-family: Arial, sans-serif;">';
+
+            for (const tabId of selectedTabs) {
+                const element = document.getElementById(`${tabId}-content`).cloneNode(true);
+                const title = document.querySelector(`[data-tab='${tabId}']`).textContent;
+                
+                htmlString += `<h1 style="font-size: 22px; font-weight: bold; margin-top: 20px;">${title}</h1>`;
+
+                const canvases = element.querySelectorAll('canvas');
+                for (const canvas of canvases) {
+                    const img = new Image();
+                    img.src = canvas.toDataURL('image/png', 1.0);
+                    img.style.maxWidth = '100%';
+                    img.style.height = 'auto';
+                    canvas.parentNode.replaceChild(img, canvas);
+                }
+
+                const tables = element.querySelectorAll('table');
+                tables.forEach(table => {
+                    table.setAttribute('border', '1');
+                    table.setAttribute('cellspacing', '0');
+                    table.setAttribute('cellpadding', '5');
+                    table.style.borderCollapse = 'collapse';
+                    table.style.width = '100%';
+                    table.style.fontSize = '12px';
+                    table.querySelectorAll('th, td').forEach(cell => {
+                        cell.style.border = '1px solid #cccccc';
+                        cell.style.padding = '5px';
+                    });
+                     table.querySelectorAll('th').forEach(th => {
+                        th.style.fontWeight = 'bold';
+                        th.style.backgroundColor = '#f2f2f2';
+                    });
+                });
+                
+                htmlString += element.innerHTML;
+            }
+
+            htmlString += '</body></html>';
+
+            try {
+                const blob = new Blob([htmlString], { type: 'text/html' });
+                const clipboardItem = new ClipboardItem({ [blob.type]: blob });
+                await navigator.clipboard.write([clipboardItem]);
+                showAlert('報告內容已複製到剪貼簿！您現在可以將其貼到 Google 文件或 Word 中。');
+            } catch (err) {
+                console.error('複製失敗:', err);
+                const tempEl = document.createElement('div');
+                tempEl.style.position = 'absolute';
+                tempEl.style.left = '-9999px';
+                tempEl.innerHTML = htmlString;
+                document.body.appendChild(tempEl);
+                const range = document.createRange();
+                range.selectNodeContents(tempEl);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                try {
+                    document.execCommand('copy');
+                    showAlert('報告內容已複製到剪貼簿！您現在可以將其貼到 Google 文件或 Word 中。');
+                } catch (e) {
+                    showAlert('自動複製失敗，您的瀏覽器可能不支援此操作。');
+                    console.error('Fallback 複製失敗:', e);
+                }
+                document.body.removeChild(tempEl);
+            }
+             showLoader(false);
+        }
 
         function updateBuildingTypeButtonText() {
             const allCheckboxes = document.querySelectorAll('.building-type-checkbox');
