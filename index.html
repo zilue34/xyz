@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>房地產資料篩選與分析儀表板 v2.2</title>
+    <title>房地產資料篩選與分析儀表板 v3.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -156,7 +156,7 @@
 
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-bold title-gradient">房地產資料篩選與分析儀表板 v2.2</h1>
+            <h1 class="text-3xl md:text-4xl font-bold title-gradient">房地產資料篩選與分析儀表板 v3.2</h1>
             <p class="mt-2 text-gray-600">上傳您的CSV檔案，篩選資料並產生分析報告。</p>
         </header>
 
@@ -257,10 +257,32 @@
                         </div>
                     </div>
                     <div>
-                        <label for="districtFilter" class="block text-sm font-medium text-gray-700 mb-2">2. 行政區</label>
-                        <select id="districtFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" disabled>
-                            <option value="all">所有行政區</option>
-                        </select>
+                        <!-- NEW: Container for district filters -->
+                        <div id="district-filter-container">
+                            <label for="districtFilter" class="flex justify-between items-center text-sm font-medium text-gray-700 mb-2">
+                                <span>2. 行政區</span>
+                                <label for="district-search-toggle" class="flex items-center cursor-pointer">
+                                    <span class="mr-2 text-xs font-medium text-gray-700">進階</span>
+                                    <div class="relative">
+                                        <input type="checkbox" id="district-search-toggle" class="toggle-switch sr-only" disabled>
+                                        <div class="toggle-bg block bg-gray-200 w-8 h-4 rounded-full"></div>
+                                        <div class="dot absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform duration-200 ease-in-out"></div>
+                                    </div>
+                                </label>
+                            </label>
+                            <!-- Normal select -->
+                            <select id="districtFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" disabled>
+                                <option value="all">所有行政區</option>
+                            </select>
+                             <!-- Advanced multi-select dropdown -->
+                            <div id="districtMultiSelectContainer" class="hidden dropdown-checkbox-container">
+                                <button type="button" id="districtMultiSelectButton" class="dropdown-checkbox-button">
+                                    <span id="districtMultiSelectButtonText">選擇行政區</span>
+                                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="districtMultiSelectMenu" class="dropdown-checkbox-menu"></div>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">3. 建築類型</label>
@@ -428,6 +450,13 @@
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loaderText');
         const priceGridTooltip = document.getElementById('priceGridTooltip');
+        
+        // NEW: District advanced search elements
+        const districtSearchToggle = document.getElementById('district-search-toggle');
+        const districtMultiSelectContainer = document.getElementById('districtMultiSelectContainer');
+        const districtMultiSelectButton = document.getElementById('districtMultiSelectButton');
+        const districtMultiSelectButtonText = document.getElementById('districtMultiSelectButtonText');
+        const districtMultiSelectMenu = document.getElementById('districtMultiSelectMenu');
 
         // Advanced Building Filter Elements
         const advancedBuildingFilterToggle = document.getElementById('advancedBuildingFilterToggle');
@@ -823,7 +852,7 @@
         };
 
         function enableFilters(enabled) {
-            [districtFilter, buildingTypeButton, buildingNameSearch, searchModeToggle, priceGridToggle, startDateInput, endDateInput, generateReportBtn, advancedBuildingFilterToggle].forEach(el => el.disabled = !enabled);
+            [districtFilter, districtSearchToggle, buildingTypeButton, buildingNameSearch, searchModeToggle, priceGridToggle, startDateInput, endDateInput, generateReportBtn, advancedBuildingFilterToggle].forEach(el => el.disabled = !enabled);
         }
 
         function populateFilters(data) {
@@ -842,12 +871,32 @@
                     }
                 }
             });
+            
+            // NEW: Populate both district filters
+            const sortedDistricts = [...districts].sort((a,b) => a.localeCompare(b, 'zh-Hant'));
             districtFilter.innerHTML = '<option value="all">所有行政區</option>';
-            [...districts].sort((a,b) => a.localeCompare(b, 'zh-Hant')).forEach(d => {
+            sortedDistricts.forEach(d => {
                 const option = document.createElement('option');
                 option.value = d; option.textContent = d;
                 districtFilter.appendChild(option);
             });
+
+            districtMultiSelectMenu.innerHTML = '';
+            const allDistrictLabel = document.createElement('label');
+            allDistrictLabel.className = "font-semibold border-b";
+            allDistrictLabel.innerHTML = `<input type="checkbox" class="mr-2" id="select-all-districts">全部選取`;
+            districtMultiSelectMenu.appendChild(allDistrictLabel);
+            sortedDistricts.forEach(d => {
+                const label = document.createElement('label');
+                label.innerHTML = `<input type="checkbox" class="mr-2 district-multiselect-checkbox" value="${d}">${d}`;
+                districtMultiSelectMenu.appendChild(label);
+            });
+            document.getElementById('select-all-districts').addEventListener('change', (e) => {
+                document.querySelectorAll('.district-multiselect-checkbox').forEach(cb => cb.checked = e.target.checked);
+                updateDistrictMultiSelectButtonText();
+                applyFilters();
+            });
+            
             buildingTypeMenu.innerHTML = '';
             const sortedTypes = [...buildingTypes].sort();
             const allLabel = document.createElement('label');
@@ -962,7 +1011,12 @@
             showLoader(true);
 
             setTimeout(() => {
-                const district = districtFilter.value;
+                // NEW: Get selected districts based on mode
+                const isDistrictAdvanced = districtSearchToggle.checked;
+                const selectedDistricts = isDistrictAdvanced 
+                    ? Array.from(document.querySelectorAll('.district-multiselect-checkbox:checked')).map(cb => cb.value)
+                    : [districtFilter.value];
+
                 const searchTerm = buildingNameSearch.value.trim();
                 const isExactMatch = searchModeToggle.checked;
                 const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
@@ -973,7 +1027,11 @@
 
                 // Stage 1: Initial filtering
                 let stage1Data = fullData.filter(row => {
-                    const districtMatch = district === 'all' || !columnNames.district || row[columnNames.district] === district;
+                    // UPDATED: District match logic
+                    const districtMatch = isDistrictAdvanced 
+                        ? (selectedDistricts.length === 0 || (columnNames.district && selectedDistricts.includes(row[columnNames.district])))
+                        : (selectedDistricts[0] === 'all' || !columnNames.district || row[columnNames.district] === selectedDistricts[0]);
+                    
                     const buildingTypeMatch = selectedTypes.length === 0 || !columnNames.buildingType || (row[columnNames.buildingType] && selectedTypes.includes(row[columnNames.buildingType].split('(')[0]));
                     const buildingNameMatch = !searchTerm || !columnNames.buildingName || !row[columnNames.buildingName] || (isExactMatch ? row[columnNames.buildingName].trim() === searchTerm : row[columnNames.buildingName].includes(searchTerm));
                     let dateMatch = true;
@@ -1528,8 +1586,8 @@
                         </div>`;
                 }
             }
-
-            // --- Part 2: New Storefront/Office vs Residential Analysis (using full data) ---
+            
+            // NEW: Updated logic for building type comparison
             const missing2 = [];
             if (!columnNames.buildingType) missing2.push("'建物型態'");
             if (missing1.length > 0) missing2.push(...missing1);
@@ -1539,123 +1597,105 @@
             } else {
                 const targetProjectNames = [...new Set(data.map(row => row[columnNames.buildingName]))];
                 const fullProjectData = fullData.filter(row => targetProjectNames.includes(row[columnNames.buildingName]));
-                const cleanedFullProjectData = filterByAnomalies(fullProjectData, anomalyExclusions);
-
-                const hasNonResidential = cleanedFullProjectData.some(row => {
+                
+                const qualifiedProjects = new Set();
+                const projectTypes = fullProjectData.reduce((acc, row) => {
+                    const name = row[columnNames.buildingName];
+                    if (!name) return acc;
+                    if (!acc[name]) acc[name] = new Set();
                     const type = row[columnNames.buildingType];
-                    return type && (type.includes('店面') || type.includes('店鋪') || type.includes('辦公商業大樓'));
+                    if (type) {
+                        if (type.includes('住宅')) acc[name].add('住宅');
+                        if (type.includes('店面') || type.includes('店鋪')) acc[name].add('店舖');
+                        if (type.includes('辦公') || type.includes('事務所')) acc[name].add('事務所');
+                    }
+                    return acc;
+                }, {});
+
+                Object.keys(projectTypes).forEach(name => {
+                    const types = projectTypes[name];
+                    const hasR = types.has('住宅');
+                    const hasS = types.has('店舖');
+                    const hasO = types.has('事務所');
+                    if ((hasR && hasS) || (hasR && hasO)) {
+                        qualifiedProjects.add(name);
+                    }
                 });
 
-                if (hasNonResidential) {
+                if (qualifiedProjects.size > 0) {
+                    const cleanedFullProjectData = filterByAnomalies(fullProjectData, anomalyExclusions);
                     const projectStats = {};
                     cleanedFullProjectData.forEach(row => {
                         const name = row[columnNames.buildingName];
-                        const type = row[columnNames.buildingType];
-                        if (!name || !type) return;
+                        if (!qualifiedProjects.has(name)) return; // Only process qualified projects
 
+                        const type = row[columnNames.buildingType];
+                        const priceCol = columnNames.housePrice || columnNames.totalPrice;
                         const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[priceCol]) - safeParseFloat(row[columnNames.parkingPrice])));
                         const area = safeParseFloat(row[columnNames.area]);
 
                         if (area > 0 && housePrice > 0) {
-                            if (!projectStats[name]) {
-                                projectStats[name] = { residential: [], storefront: [], office: [] };
-                            }
+                            if (!projectStats[name]) projectStats[name] = { residential: [], storefront: [], office: [] };
                             const unitPrice = housePrice / area;
-                            if (type.includes('住宅大樓') || type.includes('華廈')) projectStats[name].residential.push(unitPrice);
-                            if (type.includes('店面') || type.includes('店鋪')) projectStats[name].storefront.push(unitPrice);
-                            if (type.includes('辦公商業大樓')) projectStats[name].office.push(unitPrice);
+                            if (type.includes('住宅')) projectStats[name].residential.push(unitPrice);
+                            else if (type.includes('店面') || type.includes('店鋪')) projectStats[name].storefront.push(unitPrice);
+                            else if (type.includes('辦公') || type.includes('事務所')) projectStats[name].office.push(unitPrice);
                         }
                     });
 
                     let comparisonTableHTML = `
                         <div class="mt-12 pt-8 border-t">
                             <h3 class="text-xl font-semibold mb-4 text-gray-700">建案類型比較 (基於建案完整歷史資料)</h3>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm text-gray-500 analysis-table">
-                                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
-                                        <tr>
-                                            <th rowspan="2" class="px-2 py-3 border align-middle">建案名稱</th>
-                                            <th class="px-2 py-3 border">住宅均價</th>
-                                            <th colspan="2" class="px-2 py-3 border">店舖</th>
-                                            <th colspan="2" class="px-2 py-3 border">事務所</th>
-                                        </tr>
-                                        <tr>
-                                            <th class="px-2 py-3 border">(萬/坪)</th>
-                                            <th class="px-2 py-3 border">均價(萬/坪)</th>
-                                            <th class="px-2 py-3 border">對住宅倍數</th>
-                                            <th class="px-2 py-3 border">均價(萬/坪)</th>
-                                            <th class="px-2 py-3 border">對住宅倍數</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>`;
-
-                    let hasComparisonData = false;
+                            <div class="overflow-x-auto"><table class="w-full text-sm analysis-table">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                    <tr>
+                                        <th rowspan="2" class="px-2 py-3 border align-middle">建案名稱</th>
+                                        <th class="px-2 py-3 border">住宅均價</th><th colspan="2" class="px-2 py-3 border">店舖</th><th colspan="2" class="px-2 py-3 border">事務所</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="px-2 py-3 border">(萬/坪)</th><th class="px-2 py-3 border">均價(萬/坪)</th><th class="px-2 py-3 border">對住宅倍數</th><th class="px-2 py-3 border">均價(萬/坪)</th><th class="px-2 py-3 border">對住宅倍數</th>
+                                    </tr>
+                                </thead><tbody>`;
+                    
                     Object.keys(projectStats).sort().forEach(name => {
                         const stats = projectStats[name];
-                        const avgResidential = calculateQuartiles(stats.residential).avg;
-                        const avgStorefront = calculateQuartiles(stats.storefront).avg;
-                        const avgOffice = calculateQuartiles(stats.office).avg;
-
-                        if (avgResidential > 0 || avgStorefront > 0 || avgOffice > 0) {
-                            hasComparisonData = true;
-                            const storefrontRatio = avgResidential > 0 ? avgStorefront / avgResidential : Infinity;
-                            const officeRatio = avgResidential > 0 ? avgOffice / avgResidential : Infinity;
-
-                            comparisonTableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
-                                ${renderCell(name, false)}
-                                ${renderCell(formatNumber(avgResidential, true))}
-                                ${renderCell(formatNumber(avgStorefront, true))}
-                                ${renderCell(formatRatio(storefrontRatio))}
-                                ${renderCell(formatNumber(avgOffice, true))}
-                                ${renderCell(formatRatio(officeRatio))}
-                            </tr>`;
-                        }
+                        const avgR = calculateQuartiles(stats.residential).avg;
+                        const avgS = calculateQuartiles(stats.storefront).avg;
+                        const avgO = calculateQuartiles(stats.office).avg;
+                        const ratioS = avgR > 0 ? avgS / avgR : Infinity;
+                        const ratioO = avgR > 0 ? avgO / avgR : Infinity;
+                        comparisonTableHTML += `<tr class="bg-white border-b hover:bg-gray-50">
+                            ${renderCell(name, false)}${renderCell(formatNumber(avgR, true))}${renderCell(formatNumber(avgS, true))}${renderCell(formatRatio(ratioS))}${renderCell(formatNumber(avgO, true))}${renderCell(formatRatio(ratioO))}</tr>`;
                     });
-
-                    if (!hasComparisonData) {
-                        comparisonTableHTML += `<tr><td colspan="6" class="p-4 text-center text-gray-500">在篩選的建案中，找不到可比較的住宅、店舖或事務所資料。</td></tr>`;
-                    }
-
                     comparisonTableHTML += `</tbody></table></div></div>`;
                     htmlContent += comparisonTableHTML;
                 }
             }
 
+
             container.innerHTML = htmlContent;
             
             // Re-render chart (from part 1)
             const chartCtx = document.getElementById('unitPriceChart')?.getContext('2d');
-            if (window.unitPriceChart instanceof Chart) {
-                window.unitPriceChart.destroy();
-            }
+            if (window.unitPriceChart instanceof Chart) window.unitPriceChart.destroy();
             if(chartCtx) {
+                const priceCol = columnNames.housePrice || columnNames.totalPrice;
                 const unitPrices = data.map(row => {
                      const housePrice = safeParseFloat(columnNames.housePrice ? row[columnNames.housePrice] : (safeParseFloat(row[priceCol]) - safeParseFloat(row[columnNames.parkingPrice])));
                      const area = safeParseFloat(row[columnNames.area]);
-                     if (area <= 0 || housePrice <= 0) return null;
-                     return housePrice / area;
-                }).filter(price => price !== null && isFinite(price));
-
+                     return (area > 0 && housePrice > 0) ? housePrice / area : null;
+                }).filter(p => p !== null && isFinite(p));
                 if (unitPrices.length > 0) {
                     const stats = calculateQuartiles(unitPrices);
                     const maxPriceVal = Math.ceil(stats.max / 5) * 5;
                     const minPriceVal = Math.floor(stats.min / 5) * 5;
-                    const labels = [];
-                    for (let i = minPriceVal; i < maxPriceVal; i += 5) { labels.push(`${i}-${i+5}`); }
-                    
+                    const labels = []; for (let i = minPriceVal; i < maxPriceVal; i += 5) { labels.push(`${i}-${i+5}`); }
                     const bucketData = new Array(labels.length).fill(0);
                     unitPrices.forEach(p => {
-                        const bucketIndex = Math.floor((p - minPriceVal) / 5);
-                        if (bucketIndex >= 0 && bucketIndex < bucketData.length) {
-                            bucketData[bucketIndex]++;
-                        }
+                        const idx = Math.floor((p - minPriceVal) / 5);
+                        if (idx >= 0 && idx < bucketData.length) bucketData[idx]++;
                     });
-
-                    window.unitPriceChart = new Chart(chartCtx, {
-                        type: 'bar',
-                        data: { labels: labels, datasets: [{ label: '交易筆數', data: bucketData, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }] },
-                        options: { scales: { y: { beginAtZero: true, title: { display: true, text: '筆數' } }, x: { title: { display: true, text: '單價區間 (萬/坪)' } } }, plugins: { legend: { display: false } } }
-                    });
+                    window.unitPriceChart = new Chart(chartCtx, {type:'bar', data:{labels,datasets:[{label:'交易筆數',data:bucketData,backgroundColor:'rgba(59,130,246,0.5)'}]}, options:{scales:{y:{beginAtZero:true,title:{display:true,text:'筆數'}},x:{title:{display:true,text:'單價區間(萬/坪)'}}},plugins:{legend:{display:false}}}});
                 }
             }
         }
@@ -2013,6 +2053,7 @@
             return tableHTML;
         }
 
+        // UPDATED: renderPriceGridAnalysis now includes the sales order analysis
         function renderPriceGridAnalysis(data) {
             const container = document.getElementById('price-grid-content');
             const required = ['buildingName', 'floor', 'unitId', 'area'];
@@ -2024,7 +2065,7 @@
                  container.innerHTML = `<p class="text-gray-500 text-center font-semibold">此分析需要特定欄位，請檢查CSV檔案是否包含: ${missing.join(', ')}</p>`;
                 return;
             }
-
+            // ... (rest of the original price grid logic) ...
             const gridData = {};
             const unitIds = new Set();
             const floors = new Set();
@@ -2109,8 +2150,63 @@
             });
 
             tableHTML += `</tbody></table></div><div id="price-grid-detail-container" class="mt-6"></div>`;
-            container.innerHTML = tableHTML;
+            
+            // NEW: Append Sales Order Analysis
+            const salesOrderHTML = renderSalesOrderAnalysisHTML(data, buildingName);
+            container.innerHTML = tableHTML + salesOrderHTML;
         }
+        
+        // NEW: Function to generate sales order analysis table
+        function renderSalesOrderAnalysisHTML(data, buildingName) {
+            const sortedData = [...data].sort((a, b) => {
+                const dateA = parseDateString(a[columnNames.date]);
+                const dateB = parseDateString(b[columnNames.date]);
+                if (dateA < dateB) return -1;
+                if (dateA > dateB) return 1;
+                return 0;
+            });
+
+            let tableHTML = `
+                <div class="mt-12 pt-8 border-t">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-700">「${buildingName}」戶別去化順序分析</h3>
+                    <div class="overflow-x-auto border rounded-lg" style="max-height: 500px;">
+                        <table class="w-full text-sm text-gray-500 analysis-table">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-2 py-3 border">順序</th>
+                                    <th class="px-2 py-3 border">交易日</th>
+                                    <th class="px-2 py-3 border">戶別(樓層)</th>
+                                    <th class="px-2 py-3 border">單價(萬/坪)</th>
+                                    <th class="px-2 py-3 border">總價(萬)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            sortedData.forEach((item, index) => {
+                const date = item[columnNames.date];
+                const floor = item[columnNames.floor] || 'N/A';
+                const unitId = getUnitIdentifier(item[columnNames.unitId], buildingName, floor);
+                const housePrice = safeParseFloat(columnNames.housePrice ? item[columnNames.housePrice] : (safeParseFloat(item[columnNames.totalPrice]) - safeParseFloat(item[columnNames.parkingPrice])));
+                const area = safeParseFloat(item[columnNames.area]);
+                const unitPrice = area > 0 ? housePrice / area : 0;
+                const totalPrice = safeParseFloat(item[columnNames.totalPrice]);
+
+                tableHTML += `
+                     <tr class="bg-white border-b hover:bg-gray-50">
+                        ${renderCell(index + 1)}
+                        ${renderCell(date)}
+                        ${renderCell(`${unitId} (${floor})`)}
+                        ${renderCell(formatNumber(unitPrice, true))}
+                        ${renderCell(formatNumber(totalPrice))}
+                    </tr>
+                `;
+            });
+
+            tableHTML += `</tbody></table></div></div>`;
+            return tableHTML;
+        }
+
 
         function renderPriceGridDetailTable() {
             const container = document.getElementById('price-grid-detail-container');
@@ -2185,6 +2281,15 @@
         [districtFilter, startDateInput, endDateInput, priceGridToggle].forEach(el => {
             el.addEventListener('change', applyFilters);
         });
+        
+        // NEW: Event listener for the new district toggle
+        districtSearchToggle.addEventListener('change', (e) => {
+            const isAdvanced = e.target.checked;
+            districtFilter.classList.toggle('hidden', isAdvanced);
+            districtMultiSelectContainer.classList.toggle('hidden', !isAdvanced);
+            applyFilters();
+        });
+
         buildingNameSearch.addEventListener('input', applyFilters);
         searchModeToggle.addEventListener('change', () => {
             searchModeLabel.textContent = searchModeToggle.checked ? '精準' : '模糊';
@@ -2305,10 +2410,26 @@
                 applyFilters();
              }
         });
+        
+        // NEW: Event listener for district multi-select dropdown
+        districtMultiSelectButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            districtMultiSelectMenu.style.display = districtMultiSelectMenu.style.display === 'block' ? 'none' : 'block';
+        });
+
+        districtMultiSelectMenu.addEventListener('change', () => {
+            updateDistrictMultiSelectButtonText();
+            applyFilters();
+        });
+
 
         window.addEventListener('click', (e) => {
             if (!buildingTypeContainer.contains(e.target)) buildingTypeMenu.style.display = 'none';
             if (!buildingNameMultiSelectContainer.contains(e.target)) buildingNameMultiSelectMenu.style.display = 'none';
+            // NEW: Hide district dropdown on outside click
+            const districtContainer = document.getElementById('district-filter-container');
+            if (!districtContainer.contains(e.target)) districtMultiSelectMenu.style.display = 'none';
+
 
             if (e.target == customAlert) hideAlert();
             if (e.target == exportChoiceModal) exportChoiceModal.classList.remove('flex');
@@ -2369,6 +2490,25 @@
         async function copyReportToClipboard(selectedTabs) {
             // ... (Export logic unchanged)
         }
+        
+        // NEW: Update function for district button text
+        function updateDistrictMultiSelectButtonText() {
+            const allCheckboxes = document.querySelectorAll('.district-multiselect-checkbox');
+            const checkedCheckboxes = document.querySelectorAll('.district-multiselect-checkbox:checked');
+            const selectAllCheckbox = document.getElementById('select-all-districts');
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = allCheckboxes.length > 0 && allCheckboxes.length === checkedCheckboxes.length;
+            }
+
+            const selectedCount = checkedCheckboxes.length;
+            if (selectedCount === 0 || selectedCount === allCheckboxes.length) {
+                districtMultiSelectButtonText.textContent = '所有行政區';
+            } else {
+                districtMultiSelectButtonText.textContent = `已選 ${selectedCount} 個行政區`;
+            }
+        }
+
 
         function updateBuildingTypeButtonText() {
             const allCheckboxes = document.querySelectorAll('.building-type-checkbox');
