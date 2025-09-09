@@ -88,7 +88,14 @@
 
         <div id="controls">
             <div>
-                <label for="quality">圖片品質 (JPEG):</label>
+                <label for="image-format">輸出圖片格式:</label>
+                <select id="image-format">
+                    <option value="jpeg">JPEG (檔案小，有損壓縮)</option>
+                    <option value="png">PNG (檔案稍大，無損壓縮)</option>
+                </select>
+            </div>
+            <div style="margin-top: 10px;">
+                <label for="quality">圖片品質 (僅 JPEG 有效):</label>
                 <input type="range" id="quality" min="0.1" max="1.0" value="0.7" step="0.1">
                 <span id="quality-value">0.7</span>
             </div>
@@ -124,11 +131,20 @@
         const qualitySlider = document.getElementById('quality');
         const qualityValue = document.getElementById('quality-value');
         const scaleSelect = document.getElementById('scale');
+        const imageFormatSelect = document.getElementById('image-format');
 
         let selectedFile = null;
 
         qualitySlider.addEventListener('input', (e) => {
             qualityValue.textContent = e.target.value;
+        });
+
+        imageFormatSelect.addEventListener('change', () => {
+            if (imageFormatSelect.value === 'png') {
+                qualitySlider.disabled = true;
+            } else {
+                qualitySlider.disabled = false;
+            }
         });
 
         uploadInput.addEventListener('change', (e) => {
@@ -164,6 +180,9 @@
                     
                     const jpegQuality = parseFloat(qualitySlider.value);
                     const scale = parseFloat(scaleSelect.value);
+                    const imageFormat = imageFormatSelect.value; // 'jpeg' or 'png'
+                    const mimeType = imageFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+                    const imageCompress = imageFormat === 'jpeg' ? 'FAST' : 'NONE'; // jsPDF image compression setting
 
                     for (let i = 1; i <= numPages; i++) {
                         statusEl.textContent = `正在處理第 ${i} / ${numPages} 頁...`;
@@ -176,25 +195,38 @@
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
 
-                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        // 嘗試在渲染前設定 Canvas 的背景色為白色，避免透明度問題
+                        context.fillStyle = '#FFFFFF';
+                        context.fillRect(0, 0, canvas.width, canvas.height);
 
-                        // 將 canvas 轉為 JPEG 格式的圖片數據
-                        const imgData = canvas.toDataURL('image/jpeg', jpegQuality);
+                        await page.render({ canvasContext: context, viewport: viewport, background: 'rgba(255,255,255,0)' }).promise;
+
+                        // 將 canvas 轉為指定格式的圖片數據
+                        let imgData;
+                        if (imageFormat === 'jpeg') {
+                            imgData = canvas.toDataURL('image/jpeg', jpegQuality);
+                        } else { // PNG
+                            imgData = canvas.toDataURL('image/png');
+                        }
+                        
+                        // 移除 canvas，避免記憶體洩漏
+                        canvas.width = canvas.height = 0; // 釋放記憶體
 
                         if (i === 1) {
                             // 第一頁，初始化 jsPDF
                             // 使用 canvas 的尺寸來決定 PDF 的尺寸
                             newPdf = new jsPDF({
-                                orientation: canvas.width > canvas.height ? 'l' : 'p', // l: landscape, p: portrait
+                                orientation: viewport.width > viewport.height ? 'l' : 'p', // l: landscape, p: portrait
                                 unit: 'px',
-                                format: [canvas.width, canvas.height]
+                                format: [viewport.width, viewport.height]
                             });
                         } else {
                             // 新增一頁
-                            newPdf.addPage([canvas.width, canvas.height], canvas.width > canvas.height ? 'l' : 'p');
+                            newPdf.addPage([viewport.width, viewport.height], viewport.width > viewport.height ? 'l' : 'p');
                         }
 
-                        newPdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+                        // 新增圖片到 PDF，並明確指定格式和壓縮方式
+                        newPdf.addImage(imgData, imageFormat.toUpperCase(), 0, 0, viewport.width, viewport.height, null, imageCompress);
                     }
 
                     statusEl.textContent = '壓縮完成！準備下載。';
