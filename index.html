@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF 壓縮工具</title>
+    <title>PDF 壓縮工具 (最終修改版)</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -26,27 +26,41 @@
         }
         input[type="file"] {
             display: block;
+            width: 95%;
             margin: 20px auto;
             padding: 10px;
             border: 2px dashed #ccc;
             border-radius: 5px;
             cursor: pointer;
+            transition: border-color 0.3s;
         }
         input[type="file"]:hover {
             border-color: #3498db;
         }
-        #controls, #status, #download-section {
-            text-align: center;
+        #controls {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
             margin-top: 20px;
         }
-        label {
-            font-weight: bold;
-            margin-right: 10px;
+        .control-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 15px;
         }
-        select, input[type="range"] {
-            padding: 5px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
+        .control-group label {
+            font-weight: bold;
+            margin-right: 15px;
+            text-align: right;
+            flex-basis: 180px;
+        }
+        .control-group select, .control-group input[type="range"] {
+            flex-grow: 1;
+        }
+        #status, #download-section {
+            text-align: center;
+            margin-top: 20px;
         }
         button {
             background-color: #3498db;
@@ -59,7 +73,7 @@
             transition: background-color 0.3s;
         }
         button:disabled {
-            background-color: #a0a0a0;
+            background-color: #bdc3c7;
             cursor: not-allowed;
         }
         button:hover:not(:disabled) {
@@ -82,30 +96,29 @@
 
     <div class="container">
         <h1>PDF 壓縮工具</h1>
-        <p style="text-align: center;">上傳 PDF，透過網頁截圖方式降低檔案大小，所有操作均在您的瀏覽器完成。</p>
+        <p style="text-align: center;">上傳 PDF，透過調整設定來平衡檔案大小與顏色品質。</p>
 
         <input type="file" id="pdf-upload" accept="application/pdf">
 
         <div id="controls">
-            <div>
+            <div class="control-group">
                 <label for="image-format">輸出圖片格式:</label>
                 <select id="image-format">
-                    <option value="jpeg">JPEG (檔案小，有損壓縮)</option>
-                    <option value="png">PNG (檔案稍大，無損壓縮)</option>
+                    <option value="jpeg">JPEG (檔案最小，推薦)</option>
+                    <option value="png">PNG (顏色最準，檔案較大)</option>
                 </select>
             </div>
-            <div style="margin-top: 10px;">
-                <label for="quality">圖片品質 (僅 JPEG 有效):</label>
-                <input type="range" id="quality" min="0.1" max="1.0" value="0.7" step="0.1">
-                <span id="quality-value">0.7</span>
+            <div class="control-group">
+                <label for="quality">圖片品質 (僅 JPEG):</label>
+                <input type="range" id="quality" min="0.5" max="1.0" value="0.85" step="0.05">
+                <span id="quality-value" style="margin-left:10px; min-width:30px;">0.85</span>
             </div>
-            <div style="margin-top: 10px;">
+            <div class="control-group">
                 <label for="scale">解析度比例:</label>
                 <select id="scale">
-                    <option value="0.5">低 (50%)</option>
-                    <option value="1.0" selected>中 (100%)</option>
-                    <option value="1.5">高 (150%)</option>
-                    <option value="2.0">原始解析度 (200%)</option>
+                    <option value="1.0">標準 (100%)</option>
+                    <option value="1.5" selected>清晰 (150%)</option>
+                    <option value="2.0">高解析度 (200%)</option>
                 </select>
             </div>
         </div>
@@ -136,15 +149,13 @@
         let selectedFile = null;
 
         qualitySlider.addEventListener('input', (e) => {
-            qualityValue.textContent = e.target.value;
+            qualityValue.textContent = parseFloat(e.target.value).toFixed(2);
         });
 
         imageFormatSelect.addEventListener('change', () => {
-            if (imageFormatSelect.value === 'png') {
-                qualitySlider.disabled = true;
-            } else {
-                qualitySlider.disabled = false;
-            }
+            const isPng = imageFormatSelect.value === 'png';
+            qualitySlider.disabled = isPng;
+            qualitySlider.parentElement.style.opacity = isPng ? 0.5 : 1;
         });
 
         uploadInput.addEventListener('change', (e) => {
@@ -180,9 +191,9 @@
                     
                     const jpegQuality = parseFloat(qualitySlider.value);
                     const scale = parseFloat(scaleSelect.value);
-                    const imageFormat = imageFormatSelect.value; // 'jpeg' or 'png'
+                    const imageFormat = imageFormatSelect.value;
                     const mimeType = imageFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
-                    const imageCompress = imageFormat === 'jpeg' ? 'FAST' : 'NONE'; // jsPDF image compression setting
+                    const imageCompress = imageFormat === 'jpeg' ? 'FAST' : 'NONE';
 
                     for (let i = 1; i <= numPages; i++) {
                         statusEl.textContent = `正在處理第 ${i} / ${numPages} 頁...`;
@@ -195,37 +206,25 @@
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
 
-                        // 嘗試在渲染前設定 Canvas 的背景色為白色，避免透明度問題
                         context.fillStyle = '#FFFFFF';
                         context.fillRect(0, 0, canvas.width, canvas.height);
 
-                        await page.render({ canvasContext: context, viewport: viewport, background: 'rgba(255,255,255,0)' }).promise;
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
 
-                        // 將 canvas 轉為指定格式的圖片數據
-                        let imgData;
-                        if (imageFormat === 'jpeg') {
-                            imgData = canvas.toDataURL('image/jpeg', jpegQuality);
-                        } else { // PNG
-                            imgData = canvas.toDataURL('image/png');
-                        }
+                        const imgData = canvas.toDataURL(mimeType, jpegQuality);
                         
-                        // 移除 canvas，避免記憶體洩漏
-                        canvas.width = canvas.height = 0; // 釋放記憶體
+                        canvas.width = canvas.height = 0;
 
                         if (i === 1) {
-                            // 第一頁，初始化 jsPDF
-                            // 使用 canvas 的尺寸來決定 PDF 的尺寸
                             newPdf = new jsPDF({
-                                orientation: viewport.width > viewport.height ? 'l' : 'p', // l: landscape, p: portrait
+                                orientation: viewport.width > viewport.height ? 'l' : 'p',
                                 unit: 'px',
                                 format: [viewport.width, viewport.height]
                             });
                         } else {
-                            // 新增一頁
                             newPdf.addPage([viewport.width, viewport.height], viewport.width > viewport.height ? 'l' : 'p');
                         }
 
-                        // 新增圖片到 PDF，並明確指定格式和壓縮方式
                         newPdf.addImage(imgData, imageFormat.toUpperCase(), 0, 0, viewport.width, viewport.height, null, imageCompress);
                     }
 
@@ -240,7 +239,6 @@
                     console.error('處理 PDF 時發生錯誤:', error);
                     statusEl.textContent = `發生錯誤: ${error.message}`;
                 } finally {
-                    // 重新啟用按鈕
                     compressBtn.disabled = false;
                     uploadInput.disabled = false;
                 }
